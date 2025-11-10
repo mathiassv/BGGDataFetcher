@@ -1,0 +1,44 @@
+# Files to ignore
+bin/
+obj/
+*.user
+*.suo
+.vs/
+
+# User-specific files
+*.rsuser
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Secrets and sensitive data
+appsettings.json
+appsettings.*.json
+!appsettings.Development.json
+.env
+*.secret
+secrets.json
+
+# Configuration files with potential secrets (keep the template)
+BGGDataFetcher.json
+!BGGDataFetcher.json.template
+
+# Data dump files
+boardgames_ranks*.zip
+boardgames_ranks*.csv
+
+# Error logs and XML errors
+bgg_errors.log
+xml_errors/
+
+# Application logs
+logs/
+*.log
+
+# Output files
+*.csv
+TopGames.json
+TopGamesDetailed.json
+TopGamesDetailed_progress_*.json
+bgg_top_*.csv

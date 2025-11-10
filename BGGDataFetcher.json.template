@@ -1,0 +1,18 @@
+{
+  "BggApi": {
+    "BearerToken": ""
+  },
+  "Logging": {
+    "LogLevel": "Information"
+  },
+  "Settings": {
+    "LoadFromFile": false,
+    "DataDumpFileName": "boardgames_ranks_2025-11-07.zip",
+    "Count": 100,
+    "StartPosition": 0,
+    "LoadFileName": "TopGames.json",
+    "SaveBasicFileName": "TopGames.json",
+    "SaveDetailedFileName": "TopGamesDetailed.json",
+    "FetchGameDetails": true
+  }
+}
