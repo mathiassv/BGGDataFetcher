@@ -93,7 +93,7 @@ BGG_API_BEARER_TOKEN=your-token-here
 
 | Key | Description | How to Obtain |
 |-----|-------------|---------------|
-| `BggApi:BearerToken` | BoardGameGeek API Bearer Token | Contact BGG or check their API documentation |
+| `BggApi:BearerToken` | BoardGameGeek API Bearer Token | Register your application at https://boardgamegeek.com/applications (requires BGG login and approval). Once approved, create a token for your application. See README.md for detailed instructions. |
 
 ## Troubleshooting
 
@@ -112,4 +112,3 @@ dotnet user-secrets list
 Should show:
 ```
 BggApi:BearerToken = your-token-here
-```

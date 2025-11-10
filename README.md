@@ -1,10 +1,10 @@
 ﻿# BoardGameGeek Data Fetcher
 
-A .NET 9 console application that collects detailed information about top-ranked board games from [BoardGameGeek](https://boardgamegeek.com) using BGG's official data dumps and API.
+A .NET 9 console application that collects detailed information about top-ranked board games from [BoardGameGeek](https://boardgamegeek.com) using BGG's official ranked games data dumps and API.
 
 ## ✨ Features
 
-- **BGG Data Dump Import**: Fast import from official BGG data dumps (required)
+- **BGG Ranked Games Data Dump Import**: Fast import from official BGG ranked games data dumps (required)
 - **API Integration**: Enriches game data using BoardGameGeek's XML API2
 - **Comprehensive Data**: Collects extensive game information including:
   - Basic info (name, year, rank, ratings)
@@ -25,8 +25,41 @@ A .NET 9 console application that collects detailed information about top-ranked
 ### Prerequisites
 
 - [.NET 9 SDK](https://dotnet.microsoft.com/download/dotnet/9.0)
-- BoardGameGeek API Bearer Token
+- BoardGameGeek API Bearer Token (see instructions below)
 - **BGG Data Dump file** (see instructions below)
+
+### 🔑 Getting Your BGG API Bearer Token
+
+To use the BoardGameGeek API, you need to obtain a Bearer Token by registering your application with BGG.
+
+### Step-by-Step Instructions:
+
+1. **Log In to BoardGameGeek**
+   - Go to https://boardgamegeek.com and log in with your account
+
+2. **Register Your Application**
+   - Visit https://boardgamegeek.com/applications (you must be logged in)
+   - Click on "Register Application" or similar option
+   - Fill in the application details:
+     - **Application Name**: e.g., "BGG Data Fetcher"
+     - **Description**: Brief description of what your application does
+     - **Redirect URL**: Can use a placeholder like `http://localhost` if not needed
+   - Submit your application for approval
+
+3. **Wait for Approval**
+   - BGG staff will review your application
+   - You'll receive a notification when approved (this may take some time)
+
+4. **Create a Token**
+   - Once approved, go back to https://boardgamegeek.com/applications
+   - Find your application in the list
+   - Click on it to view details
+   - Look for an option to "Create New Token" or "Generate Token"
+   - Copy the generated Bearer Token (you'll need this for the next step)
+
+5. **Configure the Token**
+   - Use the token with the setup command in the Installation section below
+   - **Keep your token secure** - don't share it or commit it to source control
 
 ### Installation
 
@@ -55,9 +88,9 @@ git clone <repository-url>
 
 5. **Download BGG Data Dump** (see instructions below)
 
-## 📦 Getting the BGG Data Dump (Required)
+## 📦 Getting the BGG Ranked Games Data Dump (Required)
 
-The application requires BGG's official data dump file to get game rankings. **You must be logged in to BoardGameGeek to download this file.**
+The application requires BGG's official ranked games data dump file to get game rankings. This data dump contains minimal information (ID, name, year, rank, ratings) but includes all games in ranked order as a CSV file. **You must be logged in to BoardGameGeek to download this file.**
 
 ### Step-by-Step Instructions:
 
@@ -73,7 +106,7 @@ The application requires BGG's official data dump file to get game rankings. **Y
 
 3. **Download the Data Dump**
    - While logged in, visit: https://boardgamegeek.com/data_dumps/bg_ranks
-- You'll see a list of available data dumps with dates
+   - You'll see a list of available data dumps with dates
    - Click the download link for the latest file (e.g., `boardgames_ranks_2025-11-07.zip`)
    - **Important**: You must be logged in or the page will show "Access Denied"
 
@@ -380,145 +413,6 @@ This dual approach provides:
 - Detailed, structured logging for debugging and diagnostics (file via ILogger)
 - Real-time progress visibility while keeping a complete log history
 
-### Log Files
-
-The application creates the following log files:
-
-1. **`logs/bgg_datafetcher__{Date}.log`** - Structured application logs (all services)
-   - Created automatically
-   - One file per day
-   - Contains all `ILogger` output from services
-   - Example: `logs/bgg_datafetcher_20250115.log`
-
-2. **`bgg_errors.log`** - Error-only log
-   - Contains only errors and critical issues
-   - Timestamped error messages
-- Used for quick error review
-
-## 📝 Logging
-
-The application uses **Microsoft.Extensions.Logging** with console output for all logging.
-
-### Configurable Log Level
-
-You can control the verbosity of logging by setting the `LogLevel` in `BGGDataFetcher.json`:
-
-```json
-{
-  "Logging": {
-    "LogLevel": "Information"
-  }
-}
-```
-
-**Available Log Levels** (from most to least verbose):
-- `Trace` - Very detailed diagnostic information
-- `Debug` - Detailed diagnostic information (includes delays, verbose output)
-- `Information` - Normal operation messages (default, recommended)
-- `Warning` - Non-fatal issues (rate limiting, skipped games)
-- `Error` - Fatal errors that stop processing
-- `Critical` - Critical failures
-- `None` - Disable all logging
-
-**Examples:**
-
-```json
-// Minimal output - only warnings and errors
-{"Logging": {"LogLevel": "Warning"}}
-
-// Verbose output - see everything including delays
-{"Logging": {"LogLevel": "Debug"}}
-
-// Production - balanced output
-{"Logging": {"LogLevel": "Information"}}
-```
-
-### Dual Logging
-
-- **Console**: Clean, user-friendly output (via `IConsoleOutput`)
-- **File (`logs/bgg_datafecther_{Date}.log`)**: Detailed structured logs (via `ILogger`)
-
-This allows you to monitor progress in real-time while keeping a permanent record of all operations.
-
-### Changing Log Level at Runtime
-
-Simply edit `BGGDataFetcher.json` and change the `LogLevel` value:
-
-```json
-{
-  "Logging": {
-    "LogLevel": "Debug"  // Changed from "Information"
-  }
-}
-```
-
-Run the application again to see more detailed output.
-
-## 💬 Support
-
-For issues, questions, or suggestions:
-- Open an issue on GitHub
-- Check [SECRETS.md](SECRETS.md) for secret management help
-- See [BGGDataFetcher.Configuration.md](BGGDataFetcher.Configuration.md) for configuration examples
-
-## 🔧 Troubleshooting
-
-### Errors During Detail Fetching
-
-**Check error logs:**
-```bash
-# View error log
-cat bgg_errors.log
-```
-
-**Common issues:**
-- **Rate limiting (429)**: Application automatically handles this by pausing and increasing delays
-- **XML parsing errors**: Errors are logged to bgg_errors.log and processing continues
-- **Network timeouts**: Resume using `StartPosition` from last checkpoint
-- **Invalid game IDs**: Check error log for specific game IDs that failed
-
-**Recovery steps:**
-1. Check `bgg_errors.log` for error details
-2. Look at progress files to see last successful checkpoint
-3. Set `StartPosition` to resume from last checkpoint
-4. Re-run the application
-
-### Data Dump Issues
-
-**File not found:**
-- Ensure ZIP file is in project directory
-- Check filename matches `DataDumpFileName` in config
-- Verify file was downloaded completely
-
-**Parsing errors:**
-- Make sure file is the correct BGG data dump format
-- Try downloading a fresh copy
-- Check that ZIP contains `boardgames_ranks.csv`
-
-### API Issues
-
-**401 Unauthorized:**
-- Check Bearer token is set correctly
-- Verify token with: `dotnet user-secrets list`
-- Token might have expired - get a new one
-
-**Too many requests:**
-- Application handles this automatically
-- Consider increasing initial delay in code if persistent
-- Check `bgg_errors.log` for rate limit patterns
-
-### Performance Issues
-
-**Slow detail fetching:**
-- This is normal - BGG API has rate limits
-- Progress is saved every 300 games
-- Can resume anytime using `StartPosition`
-
-**Large dataset:**
-- Use `FetchGameDetails: false` to get basic data quickly first
-- Then fetch details in smaller batches
-- Merge results using progress files
-
 ## 📌 Version History
 
 ### v1.0.0
@@ -540,3 +434,9 @@ cat bgg_errors.log
 ---
 
 Made with ❤️ for the board game community
+
+## 📄 License & Copyright
+
+Copyright © 2025 Mathias Svensson. All rights reserved.
+
+Developed by Mathias Svensson (GitHub Copilot helped).
