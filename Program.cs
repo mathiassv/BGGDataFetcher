@@ -23,8 +23,8 @@ configuration.GetSection("Logging").Bind(loggingSettings);
 // Parse log level from configuration
 if (!Enum.TryParse<LogLevel>(loggingSettings.LogLevel, true, out var configuredLogLevel))
 {
-  configuredLogLevel = LogLevel.Information; // Default fallback
-  Console.WriteLine($"Warning: Invalid log level '{loggingSettings.LogLevel}'. Using 'Information' instead.");
+    configuredLogLevel = LogLevel.Information; // Default fallback
+    Console.WriteLine($"Warning: Invalid log level '{loggingSettings.LogLevel}'. Using 'Information' instead.");
 }
 
 // Set up dependency injection and logging
@@ -33,12 +33,12 @@ var services = new ServiceCollection();
 // Configure logging to write to file instead of console
 services.AddLogging(builder =>
 {
-  // Remove console logging for ILogger
-  // builder.AddConsole();
-  
-  // Add file logging
-  builder.AddFile("logs/bgg_datafetcher_{Date}.log", minimumLevel: configuredLogLevel);
-  builder.SetMinimumLevel(configuredLogLevel);
+    // Remove console logging for ILogger
+    // builder.AddConsole();
+
+    // Add file logging
+    builder.AddFile("logs/bgg_datafetcher_{Date}.log", minimumLevel: configuredLogLevel);
+    builder.SetMinimumLevel(configuredLogLevel);
 });
 
 var serviceProvider = services.BuildServiceProvider();
@@ -62,10 +62,10 @@ configuration.GetSection("Settings").Bind(settings);
 // Validate settings
 if (string.IsNullOrEmpty(apiSettings.BearerToken))
 {
-  output.WriteError("Bearer token not found!");
-  output.WriteInfo("Please set it using: dotnet user-secrets set \"BggApi:BearerToken\" \"your-token-here\"");
-  output.WriteInfo("Or add it to BGGDataFetcher.json (not recommended for security)");
-  return;
+    output.WriteError("Bearer token not found!");
+    output.WriteInfo("Please set it using: dotnet user-secrets set \"BggApi:BearerToken\" \"your-token-here\"");
+    output.WriteInfo("Or add it to BGGDataFetcher.json (not recommended for security)");
+    return;
 }
 
 // Display current configuration
@@ -75,24 +75,24 @@ output.WriteInfo("  Log Level: {LogLevel}", configuredLogLevel);
 output.WriteInfo("  Load From File: {LoadFromFile}", settings.LoadFromFile);
 if (settings.LoadFromFile)
 {
-  output.WriteInfo("  Load File: {LoadFileName}", settings.LoadFileName);
+    output.WriteInfo("  Load File: {LoadFileName}", settings.LoadFileName);
 }
 else
 {
-  output.WriteInfo("  Data Dump File: {DataDumpFileName}", settings.DataDumpFileName);
+    output.WriteInfo("  Data Dump File: {DataDumpFileName}", settings.DataDumpFileName);
 }
 output.WriteInfo("  Count: {Count}", settings.Count);
 if (settings.StartPosition > 0)
 {
-  output.WriteInfo("  Start Position: {StartPosition} (resuming from previous run)", settings.StartPosition);
+    output.WriteInfo("  Start Position: {StartPosition} (resuming from previous run)", settings.StartPosition);
 }
 output.WriteInfo("  Save Basic File: {SaveBasicFileName}", settings.SaveBasicFileName);
 output.WriteInfo("  Save Detailed File: {SaveDetailedFileName}", settings.SaveDetailedFileName);
 output.WriteInfo("  Fetch Game Details: {FetchGameDetails}", settings.FetchGameDetails);
 if (settings.SaveIndividualJsonFiles)
 {
-  output.WriteInfo("  Save Individual JSON Files: {SaveIndividualJsonFiles}", settings.SaveIndividualJsonFiles);
-  output.WriteInfo("  Individual JSON Output Folder: {IndividualJsonOutputFolder}", settings.IndividualJsonOutputFolder);
+    output.WriteInfo("  Save Individual JSON Files: {SaveIndividualJsonFiles}", settings.SaveIndividualJsonFiles);
+    output.WriteInfo("  Individual JSON Output Folder: {IndividualJsonOutputFolder}", settings.IndividualJsonOutputFolder);
 }
 output.WriteLine();
 
@@ -109,64 +109,64 @@ List<BoardGameBasic> basicGames;
 // Determine whether to use data dump or load from file
 if (settings.LoadFromFile)
 {
-  try
-  {
-    basicGames = await fileManager.LoadBasicGamesFromJsonAsync(settings.LoadFileName);
-  }
-  catch (Exception ex)
-  {
-    output.WriteError("Failed to load from file: {ErrorMessage}", ex.Message);
-    return;
-  }
+    try
+    {
+        basicGames = await fileManager.LoadBasicGamesFromJsonAsync(settings.LoadFileName);
+    }
+    catch (Exception ex)
+    {
+        output.WriteError("Failed to load from file: {ErrorMessage}", ex.Message);
+        return;
+    }
 }
 else
 {
-  // Fetch from data dump (default behavior)
-  try
-  {
-    basicGames = await fetcher.FetchTopGamesFromDataDumpAsync(
-      settings.Count,
-      settings.DataDumpFileName,
-      settings.SaveBasicFileName);
-  }
-  catch (Exception ex)
-  {
-    output.WriteError("Failed to read data dump: {ErrorMessage}", ex.Message);
-    output.WriteLine();
-    output.WriteInfo("Make sure you have downloaded the BGG data dump file.");
-    output.WriteInfo("See README.md for instructions on how to get the data dump.");
-    return;
-  }
+    // Fetch from data dump (default behavior)
+    try
+    {
+        basicGames = await fetcher.FetchTopGamesFromDataDumpAsync(
+          settings.Count,
+          settings.DataDumpFileName,
+          settings.SaveBasicFileName);
+    }
+    catch (Exception ex)
+    {
+        output.WriteError("Failed to read data dump: {ErrorMessage}", ex.Message);
+        output.WriteLine();
+        output.WriteInfo("Make sure you have downloaded the BGG data dump file.");
+        output.WriteInfo("See README.md for instructions on how to get the data dump.");
+        return;
+    }
 }
 
 // Check if we should fetch details
 if (!settings.FetchGameDetails)
 {
-  output.WriteLine();
-  output.WriteInfo("Skipping detailed game information fetch (as configured).");
-  output.WriteLine();
-  
-  // Stop timing and display elapsed time
-  stopwatch.Stop();
-  output.WriteInfo("Completed!");
-  output.WriteInfo("Total execution time: {0}", FormatElapsedTime(stopwatch.Elapsed));
+    output.WriteLine();
+    output.WriteInfo("Skipping detailed game information fetch (as configured).");
+    output.WriteLine();
 
-  // Also log to file
-  var logger = loggerFactory.CreateLogger<Program>();
-  logger.LogInformation("Total execution time: {ElapsedTime}", stopwatch.Elapsed);
-  
-  return;
+    // Stop timing and display elapsed time
+    stopwatch.Stop();
+    output.WriteInfo("Completed!");
+    output.WriteInfo("Total execution time: {0}", FormatElapsedTime(stopwatch.Elapsed));
+
+    // Also log to file
+    var logger = loggerFactory.CreateLogger<Program>();
+    logger.LogInformation("Total execution time: {ElapsedTime}", stopwatch.Elapsed);
+
+    return;
 }
 
 // Fetch detailed information for those games
 List<BoardGameDetailed> detailedGames;
 if (settings.StartPosition > 0)
 {
-  detailedGames = await fetcher.FetchGameDetailsAsync(basicGames, settings.SaveDetailedFileName, settings.StartPosition);
+    detailedGames = await fetcher.FetchGameDetailsAsync(basicGames, settings.SaveDetailedFileName, settings.StartPosition);
 }
 else
 {
-  detailedGames = await fetcher.FetchGameDetailsAsync(basicGames, settings.SaveDetailedFileName);
+    detailedGames = await fetcher.FetchGameDetailsAsync(basicGames, settings.SaveDetailedFileName);
 }
 
 // Display summary
@@ -186,16 +186,16 @@ programLogger.LogInformation("Total execution time: {ElapsedTime}", stopwatch.El
 // Helper method to format elapsed time
 static string FormatElapsedTime(TimeSpan elapsed)
 {
-  if (elapsed.TotalHours >= 1)
-  {
-    return $"{elapsed.Hours}h {elapsed.Minutes}m {elapsed.Seconds}s";
-  }
-  else if (elapsed.TotalMinutes >= 1)
-  {
-    return $"{elapsed.Minutes}m {elapsed.Seconds}s";
-  }
-  else
-  {
-    return $"{elapsed.Seconds}s";
-  }
+    if (elapsed.TotalHours >= 1)
+    {
+        return $"{elapsed.Hours}h {elapsed.Minutes}m {elapsed.Seconds}s";
+    }
+    else if (elapsed.TotalMinutes >= 1)
+    {
+        return $"{elapsed.Minutes}m {elapsed.Seconds}s";
+    }
+    else
+    {
+        return $"{elapsed.Seconds}s";
+    }
 }
