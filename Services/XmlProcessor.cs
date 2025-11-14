@@ -4,16 +4,10 @@ using Microsoft.Extensions.Logging;
 
 namespace BGGDataFetcher.Services;
 
-public class XmlProcessor
+public class XmlProcessor(ILogger? logger = null)
 {
-  private readonly GameEnricher _gameEnricher;
-  private readonly ILogger? _logger;
-
-  public XmlProcessor(ILogger? logger = null)
-  {
-    _gameEnricher = new GameEnricher();
-    _logger = logger;
-  }
+  private readonly GameEnricher _gameEnricher = new();
+  private readonly ILogger? _logger = logger;
 
   /// <summary>
   /// Parses XML content and returns an XDocument
@@ -24,20 +18,32 @@ public class XmlProcessor
   }
 
   /// <summary>
-  /// Processes XML document and extracts game details
+  /// Processes XML document and extracts game details (synchronous version)
   /// </summary>
   public List<BoardGameDetailed> ProcessXmlGames(XDocument xml, Action<string> logError, Action<string, object[]> logWarning)
   {
-    var games = new List<BoardGameDetailed>();
+    List<BoardGameDetailed> games = [];
 
     foreach (var item in xml.Root?.Elements("item") ?? [])
     {
-      var id = (int?)item.Attribute("id");
-      if (id == null) continue;
+      var id = item.Attribute("id")?.Value;
+      if (string.IsNullOrEmpty(id)) continue;
 
       try
       {
-        var game = new BoardGameDetailed { Id = id.Value };
+        var game = new BoardGameDetailed 
+        { 
+          Id = id,
+          NumId = int.Parse(id, System.Globalization.CultureInfo.InvariantCulture),
+          Name = string.Empty,
+          YearPublished = 0,
+          Categories = [],
+          Mechanics = [],
+          Designers = [],
+          Artists = [],
+          Publishers = [],
+          PlayerCountRecommendations = []
+        };
         _gameEnricher.EnrichGameFromXml(game, item);
         games.Add(game);
       }
@@ -52,7 +58,47 @@ public class XmlProcessor
   }
 
   /// <summary>
-  /// Attempts to parse XML and process games, returns null if parsing fails
+  /// Processes XML document and extracts game details (async version)
+  /// </summary>
+  public async Task<List<BoardGameDetailed>> ProcessXmlGamesAsync(XDocument xml, Func<string, Task> logErrorAsync, Action<string, object[]> logWarning)
+  {
+    List<BoardGameDetailed> games = [];
+
+    foreach (var item in xml.Root?.Elements("item") ?? [])
+    {
+      var id = item.Attribute("id")?.Value;
+      if (string.IsNullOrEmpty(id)) continue;
+
+      try
+      {
+        var game = new BoardGameDetailed 
+        { 
+          Id = id,
+          NumId = int.Parse(id, System.Globalization.CultureInfo.InvariantCulture),
+          Name = string.Empty,
+          YearPublished = 0,
+          Categories = [],
+          Mechanics = [],
+          Designers = [],
+          Artists = [],
+          Publishers = [],
+          PlayerCountRecommendations = []
+        };
+        _gameEnricher.EnrichGameFromXml(game, item);
+        games.Add(game);
+      }
+      catch (Exception ex)
+      {
+        await logErrorAsync($"Failed to enrich game ID {id}: {ex.Message}");
+        logWarning("Failed to process game ID {GameId}: {ErrorMessage}", [id, ex.Message]);
+      }
+    }
+
+    return games;
+  }
+
+  /// <summary>
+  /// Attempts to parse XML and process games, returns null if parsing fails (synchronous version)
   /// </summary>
   public List<BoardGameDetailed>? TryProcessXmlGames(string xmlContent, Action<string> logError, Action<string, object[]> logWarning)
   {
@@ -60,6 +106,23 @@ public class XmlProcessor
     {
       var xml = ParseXml(xmlContent);
       return ProcessXmlGames(xml, logError, logWarning);
+    }
+    catch (Exception)
+    {
+      // Return null to indicate parsing failure
+      return null;
+    }
+  }
+
+  /// <summary>
+  /// Attempts to parse XML and process games, returns null if parsing fails (async version)
+  /// </summary>
+  public async Task<List<BoardGameDetailed>?> TryProcessXmlGamesAsync(string xmlContent, Func<string, Task> logErrorAsync, Action<string, object[]> logWarning)
+  {
+    try
+    {
+      var xml = ParseXml(xmlContent);
+      return await ProcessXmlGamesAsync(xml, logErrorAsync, logWarning);
     }
     catch (Exception)
     {

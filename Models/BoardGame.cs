@@ -7,9 +7,10 @@ namespace BGGDataFetcher.Models;
 public class BoardGameDetailed
 {
   // Basic properties (from BoardGameBasic)
-  public int Id { get; set; }
-  public string Name { get; set; } = string.Empty;
-  public int YearPublished { get; set; }
+  public required string Id { get; set; }
+  public required int NumId { get; set; }
+  public required string Name { get; set; }
+  public required int YearPublished { get; set; }
   public int? Rank { get; set; }
   public double? BayesAverage { get; set; }
 
@@ -33,18 +34,18 @@ public class BoardGameDetailed
   public double? AverageWeight { get; set; }
 
   // Categories and Mechanics
-  public List<string> Categories { get; set; } = new List<string>();
-  public List<string> Mechanics { get; set; } = new List<string>();
+  public required List<string> Categories { get; set; } = [];
+  public required List<string> Mechanics { get; set; } = [];
 
   // Credits
-  public List<string> Designers { get; set; } = new List<string>();
-  public List<string> Artists { get; set; } = new List<string>();
-  public List<string> Publishers { get; set; } = new List<string>();
+  public required List<string> Designers { get; set; } = [];
+  public required List<string> Artists { get; set; } = [];
+  public required List<string> Publishers { get; set; } = [];
 
   // Player Count Recommendations - Summary
   public int? BestPlayerCount { get; set; }
   public int? RecommendedPlayerCount { get; set; }
 
   // Player Count Recommendations - Detailed voting data
-  public List<PlayerCountRecommendation> PlayerCountRecommendations { get; set; } = new List<PlayerCountRecommendation>();
+  public required List<PlayerCountRecommendation> PlayerCountRecommendations { get; set; } = [];
 }

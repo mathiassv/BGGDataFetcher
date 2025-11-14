@@ -42,3 +42,6 @@ TopGames.json
 TopGamesDetailed.json
 TopGamesDetailed_progress_*.json
 bgg_top_*.csv
+
+# Individual game JSON output folder
+output/

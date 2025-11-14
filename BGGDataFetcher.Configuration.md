@@ -164,6 +164,8 @@ Reduce console output to only important messages:
 | `SaveBasicFileName` | string | `"TopGames.json"` | JSON file to save basic game data to |
 | `SaveDetailedFileName` | string | `"TopGamesDetailed.json"` | JSON file to save detailed game data to |
 | `FetchGameDetails` | bool | `true` | If `true`, fetch detailed game information from the API; if `false`, skip details |
+| `SaveIndividualJsonFiles` | bool | `false` | If `true`, save each game as a separate JSON file; if `false`, save only combined file |
+| `IndividualJsonOutputFolder` | string | `"output/games"` | Folder path where individual game JSON files will be saved |
 
 ### BggApi Section
 
@@ -293,3 +295,33 @@ If detail fetching was interrupted at game 900 out of 1500:
 3. Set `"StartPosition": 600` in config
 4. Re-run to continue from position 600
 5. Merge `TopGamesDetailed_progress_600.json` with final output for complete data
+
+### Save Individual Game JSON Files
+Save each game as a separate JSON file for easier processing:
+```json
+{
+  "Settings": {
+    "Count": 1000,
+    "FetchGameDetails": true,
+    "SaveIndividualJsonFiles": true,
+    "IndividualJsonOutputFolder": "output/games"
+  }
+}
+```
+
+**How it works:**
+- Each game is saved as `{gameId}.json` in the specified folder
+- Example: `output/games/174430.json` for Gloomhaven
+- Files contain complete detailed game data
+- Combined JSON file is still saved as normal
+- Useful for:
+  - Processing games individually
+  - Building game detail pages
+  - Selective data loading
+  - Distributed processing
+
+**Benefits:**
+- ? **Individual Access**: Load single games without parsing entire dataset
+- ?? **Selective Updates**: Update specific games without re-fetching all
+- ?? **Easy Integration**: Simple to integrate with other tools
+- ?? **Version Control Friendly**: Easier to track changes to individual games

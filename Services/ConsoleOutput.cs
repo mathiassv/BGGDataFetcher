@@ -9,13 +9,13 @@ public class ConsoleOutput : IConsoleOutput
     Console.WriteLine(message);
   }
 
-  public void WriteInfo(string message, params object[] args)
+  public void WriteInfo(string message, params ReadOnlySpan<object> args)
   {
     if (args.Length > 0)
     {
       // Replace structured logging placeholders {Name} with {0}, {1}, etc.
       var formattedMessage = ConvertStructuredLoggingFormat(message, args.Length);
-      Console.WriteLine(formattedMessage, args);
+      Console.WriteLine(formattedMessage, args.ToArray());
     }
     else
     {
@@ -30,13 +30,13 @@ public class ConsoleOutput : IConsoleOutput
     Console.ResetColor();
   }
 
-  public void WriteError(string message, params object[] args)
+  public void WriteError(string message, params ReadOnlySpan<object> args)
   {
     Console.ForegroundColor = ConsoleColor.Red;
     if (args.Length > 0)
     {
       var formattedMessage = ConvertStructuredLoggingFormat(message, args.Length);
-      Console.WriteLine(formattedMessage, args);
+      Console.WriteLine(formattedMessage, args.ToArray());
     }
     else
     {
@@ -52,18 +52,18 @@ public class ConsoleOutput : IConsoleOutput
     Console.ResetColor();
   }
 
-  public void WriteWarning(string message, params object[] args)
+  public void WriteWarning(string message, params ReadOnlySpan<object> args)
   {
     Console.ForegroundColor = ConsoleColor.Yellow;
     if (args.Length > 0)
     {
       var formattedMessage = ConvertStructuredLoggingFormat(message, args.Length);
-      Console.WriteLine(formattedMessage, args);
+      Console.WriteLine(formattedMessage, args.ToArray());
     }
     else
     {
       Console.WriteLine(message);
- }
+    }
     Console.ResetColor();
   }
 
@@ -74,13 +74,13 @@ public class ConsoleOutput : IConsoleOutput
     Console.ResetColor();
   }
 
-  public void WriteDebug(string message, params object[] args)
+  public void WriteDebug(string message, params ReadOnlySpan<object> args)
   {
     Console.ForegroundColor = ConsoleColor.Gray;
     if (args.Length > 0)
     {
-   var formattedMessage = ConvertStructuredLoggingFormat(message, args.Length);
-      Console.WriteLine(formattedMessage, args);
+      var formattedMessage = ConvertStructuredLoggingFormat(message, args.Length);
+      Console.WriteLine(formattedMessage, args.ToArray());
     }
     else
     {

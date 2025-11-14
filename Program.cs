@@ -89,13 +89,18 @@ if (settings.StartPosition > 0)
 output.WriteInfo("  Save Basic File: {SaveBasicFileName}", settings.SaveBasicFileName);
 output.WriteInfo("  Save Detailed File: {SaveDetailedFileName}", settings.SaveDetailedFileName);
 output.WriteInfo("  Fetch Game Details: {FetchGameDetails}", settings.FetchGameDetails);
+if (settings.SaveIndividualJsonFiles)
+{
+  output.WriteInfo("  Save Individual JSON Files: {SaveIndividualJsonFiles}", settings.SaveIndividualJsonFiles);
+  output.WriteInfo("  Individual JSON Output Folder: {IndividualJsonOutputFolder}", settings.IndividualJsonOutputFolder);
+}
 output.WriteLine();
 
 var fetcherLogger = loggerFactory.CreateLogger<BGGDataFetcher.BGGDataFetcher>();
 var apiLogger = loggerFactory.CreateLogger<BggApiClient>();
 var dataDumpReaderLogger = loggerFactory.CreateLogger<DataDumpReader>();
 var fileManagerLogger = loggerFactory.CreateLogger<FileManager>();
-var fetcher = new BGGDataFetcher.BGGDataFetcher(apiSettings, fetcherLogger, apiLogger, dataDumpReaderLogger, fileManagerLogger, output);
+var fetcher = new BGGDataFetcher.BGGDataFetcher(apiSettings, fetcherLogger, apiLogger, dataDumpReaderLogger, fileManagerLogger, output, settings);
 
 var fileManager = new FileManager(fileManagerLogger);
 
@@ -106,7 +111,7 @@ if (settings.LoadFromFile)
 {
   try
   {
-    basicGames = fileManager.LoadBasicGamesFromJson(settings.LoadFileName);
+    basicGames = await fileManager.LoadBasicGamesFromJsonAsync(settings.LoadFileName);
   }
   catch (Exception ex)
   {
@@ -119,7 +124,7 @@ else
   // Fetch from data dump (default behavior)
   try
   {
-    basicGames = fetcher.FetchTopGamesFromDataDump(
+    basicGames = await fetcher.FetchTopGamesFromDataDumpAsync(
       settings.Count,
       settings.DataDumpFileName,
       settings.SaveBasicFileName);

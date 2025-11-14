@@ -4,64 +4,90 @@ using Microsoft.Extensions.Logging;
 
 namespace BGGDataFetcher.Services;
 
-public class FileManager
+public class FileManager(ILogger<FileManager>? logger = null)
 {
-  private readonly ILogger<FileManager>? _logger;
+    private readonly ILogger<FileManager>? _logger = logger;
 
-  public FileManager(ILogger<FileManager>? logger = null)
-  {
-    _logger = logger;
-  }
-
-  public void SaveBasicGamesToJson(List<BoardGameBasic> games, string fileName)
-  {
-    var options = new JsonSerializerOptions
+    public async Task SaveBasicGamesToJsonAsync(List<BoardGameBasic> games, string fileName)
     {
-      WriteIndented = true,
-      PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-    };
+        var options = new JsonSerializerOptions
+        {
+            WriteIndented = true,
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+        };
 
-    var json = JsonSerializer.Serialize(games.OrderBy(g => g.Rank ?? int.MaxValue).ToList(), options);
-    File.WriteAllText(fileName, json);
+        await using var stream = File.Create(fileName);
+        await JsonSerializer.SerializeAsync(stream, games.OrderBy(g => g.Rank ?? int.MaxValue).ToList(), options);
 
-    _logger?.LogInformation("✓ Data saved to: {FileName}", fileName);
-  }
-
-  public List<BoardGameBasic> LoadBasicGamesFromJson(string fileName)
-  {
-    if (!File.Exists(fileName))
-    {
-      throw new FileNotFoundException($"File not found: {fileName}");
+        _logger?.LogInformation("✓ Data saved to: {FileName}", fileName);
     }
 
-    var json = File.ReadAllText(fileName);
-    var options = new JsonSerializerOptions
+    public async Task<List<BoardGameBasic>> LoadBasicGamesFromJsonAsync(string fileName)
     {
-      PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-    };
+        if (!File.Exists(fileName))
+        {
+            throw new FileNotFoundException($"File not found: {fileName}");
+        }
 
-    var games = JsonSerializer.Deserialize<List<BoardGameBasic>>(json, options);
+        await using var stream = File.OpenRead(fileName);
+        var games = await JsonSerializer.DeserializeAsync<List<BoardGameBasic>>(stream, new JsonSerializerOptions
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+        }) ?? [];
 
-    if (games == null)
-    {
-      throw new InvalidOperationException($"Failed to deserialize games from {fileName}");
+        _logger?.LogInformation("✓ Loaded {Count} games from: {FileName}", games.Count, fileName);
+        return games;
     }
 
-    _logger?.LogInformation("✓ Loaded {Count} games from: {FileName}", games.Count, fileName);
-    return games;
-  }
-
-  public void SaveDetailedGamesToJson(List<BoardGameDetailed> games, string fileName)
-  {
-    var options = new JsonSerializerOptions
+    public async Task SaveDetailedGamesToJsonAsync(List<BoardGameDetailed> games, string fileName)
     {
-      WriteIndented = true,
-      PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-    };
+        var options = new JsonSerializerOptions
+        {
+            WriteIndented = true,
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+        };
 
-    var json = JsonSerializer.Serialize(games.OrderBy(g => g.Rank ?? int.MaxValue).ToList(), options);
-    File.WriteAllText(fileName, json);
+        await using var stream = File.Create(fileName);
+        await JsonSerializer.SerializeAsync(stream, games.OrderBy(g => g.Rank ?? int.MaxValue).ToList(), options);
 
-    _logger?.LogInformation("✓ Data saved to: {FileName}", fileName);
-  }
+        _logger?.LogInformation("✓ Data saved to: {FileName}", fileName);
+    }
+
+    public async Task SaveIndividualGameJsonFilesAsync(List<BoardGameDetailed> games, string outputFolder)
+    {
+        // Create output directory if it doesn't exist
+        if (!Directory.Exists(outputFolder))
+        {
+            Directory.CreateDirectory(outputFolder);
+            _logger?.LogInformation("Created output folder: {OutputFolder}", outputFolder);
+        }
+
+        var options = new JsonSerializerOptions
+        {
+            WriteIndented = true,
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+        };
+
+        int savedCount = 0;
+        foreach (var game in games)
+        {
+            try
+            {
+                // Create a safe filename from the game ID and name
+                var safeFileName = $"{game.Id}.json";
+                var filePath = Path.Combine(outputFolder, safeFileName);
+
+                await using var stream = File.Create(filePath);
+                await JsonSerializer.SerializeAsync(stream, game, options);
+                savedCount++;
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning("Failed to save individual file for game {GameId} ({GameName}): {ErrorMessage}",
+                  game.Id, game.Name, ex.Message);
+            }
+        }
+
+        _logger?.LogInformation("✓ Saved {SavedCount} individual game files to: {OutputFolder}", savedCount, outputFolder);
+    }
 }

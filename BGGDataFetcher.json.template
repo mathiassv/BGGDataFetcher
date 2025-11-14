@@ -7,12 +7,14 @@
   },
   "Settings": {
     "LoadFromFile": false,
-    "DataDumpFileName": "boardgames_ranks_2025-11-07.zip",
-    "Count": 100,
+    "DataDumpFileName": "data\boardgames_ranks_2025-11-07.zip",
+    "Count": 1000,
     "StartPosition": 0,
     "LoadFileName": "TopGames.json",
     "SaveBasicFileName": "TopGames.json",
     "SaveDetailedFileName": "TopGamesDetailed.json",
-    "FetchGameDetails": true
+    "FetchGameDetails": true,
+    "SaveIndividualJsonFiles": false,
+    "IndividualJsonOutputFolder": "output/games"
   }
 }

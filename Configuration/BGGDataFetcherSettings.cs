@@ -10,4 +10,6 @@ public class BGGDataFetcherSettings
   public string SaveBasicFileName { get; set; } = "TopGames.json";
   public string SaveDetailedFileName { get; set; } = "TopGamesDetailed.json";
   public bool FetchGameDetails { get; set; } = true;
+  public bool SaveIndividualJsonFiles { get; set; } = false;
+  public string IndividualJsonOutputFolder { get; set; } = "output/games";
 }

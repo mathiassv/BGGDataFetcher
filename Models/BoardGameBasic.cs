@@ -5,9 +5,10 @@ namespace BGGDataFetcher.Models;
 /// </summary>
 public class BoardGameBasic
 {
-  public int Id { get; set; }
-  public string Name { get; set; } = string.Empty;
-  public int YearPublished { get; set; }
+  public required string Id { get; set; }
+  public required int NumId { get; set; }
+  public required string Name { get; set; }
+  public required int YearPublished { get; set; }
   public int? Rank { get; set; }
   public double? BayesAverage { get; set; }
 }

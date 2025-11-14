@@ -176,6 +176,8 @@ Edit `BGGDataFetcher.json` to control the application's behavior:
 | `SaveBasicFileName` | string | `"TopGames.json"` | File to save basic game data to |
 | `SaveDetailedFileName` | string | `"TopGamesDetailed.json"` | File to save detailed game data to |
 | `FetchGameDetails` | bool | `true` | If `true`, fetch detailed API information; if `false`, skip details |
+| `SaveIndividualJsonFiles` | bool | `false` | If `true`, save each game as a separate JSON file; if `false`, save only combined file |
+| `IndividualJsonOutputFolder` | string | `"output/games"` | Folder path where individual game JSON files will be saved |
 
 ### Logging Configuration
 
@@ -241,202 +243,23 @@ If your detail fetching was interrupted (e.g., stopped at game 600 out of 1000):
   "Settings": {
     "LoadFromFile": true,
     "LoadFileName": "TopGames.json",
-  "StartPosition": 600,
+    "StartPosition": 600,
     "FetchGameDetails": true
   }
 }
 ```
 The application automatically saves progress every 300 games to files like `TopGamesDetailed_progress_300.json`, `TopGamesDetailed_progress_600.json`, etc.
 
-### Usage
-
-**Run the application:**
-```bash
-dotnet run
-```
-
-The application will:
-1. Read game rankings from the data dump
-2. Save basic game data to JSON
-3. Fetch detailed information from BGG API (if enabled)
-4. Save detailed data to JSON
-5. Display a summary of the top 10 games
-6. Show total execution time
-
-## 📁 Project Structure
-
-```
-BGGDataFetcher/
-├── Configuration/
-│   ├── BggApiSettings.cs      # API configuration model
-│   ├── LoggingSettings.cs     # Logging configuration model
-│   └── BGGDataFetcherSettings.cs     # Settings configuration model
-├── Interfaces/
-│   └── IConsoleOutput.cs      # Console output abstraction interface
-├── Models/
-│   ├── BoardGame.cs           # Main game data models
-│   ├── BoardGameBasic.cs      # Basic game information
-│   └── PlayerCountRecommendation.cs # Player count voting data
-├── Services/
-│   ├── BGGDataFetcher.cs      # Main orchestrator
-│   ├── DataDumpReader.cs      # Data dump ZIP/CSV reader
-│   ├── BggApiClient.cs        # BGG API communication
-│   ├── XmlProcessor.cs        # XML parsing helper
-│   ├── GameEnricher.cs        # XML parsing and data enrichment
-│   ├── FileManager.cs  # File I/O operations
-│   └── ConsoleOutput.cs       # Console output implementation
-├── Program.cs        # Application entry point
-├── BGGDataFetcher.json    # Configuration file (gitignored)
-├── BGGDataFetcher.json.template   # Configuration template
-├── BGGDataFetcher.Configuration.md # Configuration examples
-├── SECRETS.md       # Secret management guide
-└── README.md     # This file
-```
-
-## 📊 Output Files
-
-The application generates multiple files:
-
-1. **TopGames.json** - Basic game data from data dump
-2. **TopGamesDetailed.json** - Full enriched data with all details from API
-3. **TopGamesDetailed_progress_XXX.json** - Automatic progress checkpoints (every 300 games)
-4. **logs/bgg_datafetcher_{Date}.log** - Daily structured application logs
-5. **bgg_errors.log** - Error log file (created only if errors occur)
-
-### Error Logging
-
-The application automatically logs all errors encountered during processing:
-
-**Error Log File (`bgg_errors.log`):**
-- Contains timestamped error messages
-- Logs HTTP errors, XML parsing failures, and enrichment errors
-- Includes game IDs and batch information for context
-- Created automatically when errors occur
-
-**XML Parsing Retry Logic:**
-- Automatically splits batch in half if XML parsing fails
-- Recursively fetches smaller batches until success or single-game level
-- At single-game level, logs error and skips problematic game
-- Prevents entire run from failing due to malformed XML in batch
-- Combines results from successful sub-batches
-
-**Example Batch Splitting Flow:**
-```
-Batch of 20 games fails XML parsing
-  ├─> Split into 2 batches of 10 games
-  │    ├─> First 10: Success ✓
-  │    └─> Second 10: Fails, split again
-  │       ├─> 5 games: Success ✓
-  │         └─> 5 games: Fails, split again
-  │          ├─> 2 games: Success ✓
-  │      └─> 3 games: Split to individual
-  │     ├─> Game 1: Success ✓
-  │    ├─> Game 2: Fails, skip ✗
-  │           └─> Game 3: Success ✓
-Result: 18 out of 20 games fetched successfully
-```
-
-The application will notify you at the end if any errors occurred and where to find the error log.
-
-## 📦 NuGet Packages
-
-- **Microsoft.Extensions.Configuration** - Configuration management
-- **Microsoft.Extensions.Configuration.Json** - JSON configuration provider
-- **Microsoft.Extensions.Configuration.UserSecrets** - Secure secret storage
-- **Microsoft.Extensions.Configuration.Binder** - Configuration binding
-- **Microsoft.Extensions.Logging** - Logging abstractions
-- **Microsoft.Extensions.DependencyInjection** - Dependency injection container
-- **Serilog.Extensions.Logging.File** - File logging provider
-- **System.Net.Http.Json** - HTTP client utilities
-
-## 🏗️ Architecture
-
-### Console Output Abstraction
-
-The application uses an `IConsoleOutput` interface (located in `BGGDataFetcher.Interfaces` namespace) to abstract console output, making it testable and flexible:
-
-```csharp
-namespace BGGDataFetcher.Interfaces;
-
-public interface IConsoleOutput
+**7. Save each game as a separate JSON file:**
+If you want to save each game as an individual JSON file in addition to the combined file:
+```json
 {
-  void WriteInfo(string message);
-  void WriteInfo(string message, params object[] args);
-  void WriteError(string message);
-  void WriteWarning(string message);
-  void WriteDebug(string message);
-  void WriteLine(string message);
-  void WriteLine();
+  "Settings": {
+    "Count": 1000,
+    "FetchGameDetails": true,
+    "SaveIndividualJsonFiles": true,
+    "IndividualJsonOutputFolder": "output/games"
+  }
 }
 ```
-
-The default implementation (`ConsoleOutput` in `BGGDataFetcher.Services` namespace) writes directly to `Console` with color coding:
-- **Info**: Default color
-- **Error**: Red
-- **Warning**: Yellow
-- **Debug**: Gray
-
-**Benefits:**
-- **Testable**: Easy to mock for unit tests
-- **Flexible**: Can switch output implementations (console, file, etc.)
-- **Clean**: Simple API for output operations
-- **Colored output**: Visual distinction between message types
-- **No dependencies**: Direct console output, no logging framework needed
-
-### Logging Architecture
-
-```
-Program.cs
-  └─> IConsoleOutput (BGGDataFetcher.Interfaces)
-       └─> ConsoleOutput (BGGDataFetcher.Services)
-            └─> Console.WriteLine (direct output)
-
-Services (BGGDataFetcher, BggApiClient, DataDumpReader, FileManager)
-  └─> ILogger<T> (Microsoft.Extensions.Logging)
-       └─> File (logs/bgg_fetcher_{Date}.log)
-
-BggApiClient (Dual Logging)
-  ├─> IConsoleOutput → Console output (user-friendly progress)
-  └─> ILogger<BggApiClient> → File logging (detailed diagnostics)
-```
-
-**Program.cs** uses `IConsoleOutput` for simple, clean console output with colors.
-
-**Services** use `ILogger<T>` for structured logging to files.
-
-**BggApiClient** uses **both**:
-- `IConsoleOutput` for real-time progress updates to console
-- `ILogger` for detailed diagnostic logging to file
-
-This dual approach provides:
-- Simple, readable output for end users (console via IConsoleOutput)
-- Detailed, structured logging for debugging and diagnostics (file via ILogger)
-- Real-time progress visibility while keeping a complete log history
-
-## 📌 Version History
-
-### v1.0.0
-- BGG data dump import (ZIP/CSV parsing)
-- BGG API integration for detailed game information
-- JSON export
-- User Secrets integration for secure token storage
-- Configuration-based approach via `BGGDataFetcher.json`
-- Flexible workflows: data dump or load from file
-- Automatic error logging and XML error capture
-- Progress saving with automatic checkpoints every 300 games
-- Resume capability from any position
-- Dual logging system (console + file)
-- Configurable log levels
-- Automatic batch splitting for XML parsing failures
-- Rate limiting handling with automatic retry
-- Execution time tracking
-
----
-
-Made with ❤️ for the board game community
-
-## 📄 License & Copyright
-
-Copyright © 2025 Mathias Svensson. All rights reserved.
-
-Developed by Mathias Svensson (GitHub Copilot helped).
+This will create files like `output/games/174430.json`, `output/games/161936.json`, etc., where the filename is the game ID.

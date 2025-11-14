@@ -4,18 +4,15 @@ using Microsoft.Extensions.Logging;
 
 namespace BGGDataFetcher.Services;
 
-public class DataDumpReader
+public class DataDumpReader(ILogger<DataDumpReader>? logger = null)
 {
   private const string CSV_FILE_NAME = "boardgames_ranks.csv";
-  private readonly ILogger<DataDumpReader>? _logger;
-
-  public DataDumpReader(ILogger<DataDumpReader>? logger = null)
-  {
-    _logger = logger;
-  }
+  private readonly ILogger<DataDumpReader>? _logger = logger;
 
   public List<BoardGameBasic> ReadFromDataDump(string zipFilePath, int count)
   {
+    ArgumentException.ThrowIfNullOrWhiteSpace(zipFilePath);
+
     if (!File.Exists(zipFilePath))
     {
       throw new FileNotFoundException($"Data dump file not found: {zipFilePath}");
@@ -23,7 +20,7 @@ public class DataDumpReader
 
     _logger?.LogInformation("Reading from data dump: {FilePath}...", zipFilePath);
 
-    var games = new List<BoardGameBasic>();
+    List<BoardGameBasic> games = [];
 
     using (var archive = ZipFile.OpenRead(zipFilePath))
     {
@@ -79,9 +76,11 @@ public class DataDumpReader
 
     try
     {
+      var idString = fields[0].Trim();
       var game = new BoardGameBasic
       {
-        Id = int.Parse(fields[0], System.Globalization.CultureInfo.InvariantCulture),
+        Id = idString,
+        NumId = int.Parse(idString, System.Globalization.CultureInfo.InvariantCulture),
         Name = fields[1].Trim('"'), // Remove quotes from name
         YearPublished = int.Parse(fields[2], System.Globalization.CultureInfo.InvariantCulture),
         Rank = string.IsNullOrEmpty(fields[3]) ? null : int.Parse(fields[3], System.Globalization.CultureInfo.InvariantCulture),
@@ -98,7 +97,7 @@ public class DataDumpReader
 
   private List<string> ParseCsvFields(string line)
   {
-    var fields = new List<string>();
+    List<string> fields = [];
     var currentField = new System.Text.StringBuilder();
     bool inQuotes = false;
 

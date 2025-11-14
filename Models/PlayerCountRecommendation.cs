@@ -2,8 +2,8 @@ namespace BGGDataFetcher.Models;
 
 public class PlayerCountRecommendation
 {
-  public int NumPlayers { get; set; }
-  public int Best { get; set; }
-  public int Recommended { get; set; }
-  public int NotRecommended { get; set; }
+  public required int NumPlayers { get; set; }
+  public required int Best { get; set; }
+  public required int Recommended { get; set; }
+  public required int NotRecommended { get; set; }
 }

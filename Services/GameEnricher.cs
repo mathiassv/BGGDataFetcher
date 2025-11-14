@@ -41,7 +41,7 @@ public class GameEnricher
       .Select(l => l.Attribute("value")?.Value)
    .Where(v => !string.IsNullOrEmpty(v))
       .ToList();
-    if (categories.Any())
+    if (categories.Count != 0)
       game.Categories = categories!;
 
     // Mechanics - Extract all boardgamemechanic links
@@ -50,7 +50,7 @@ public class GameEnricher
       .Select(l => l.Attribute("value")?.Value)
       .Where(v => !string.IsNullOrEmpty(v))
       .ToList();
-    if (mechanics.Any())
+    if (mechanics.Count != 0)
       game.Mechanics = mechanics!;
 
     // Designers - Extract all boardgamedesigner links
@@ -59,7 +59,7 @@ public class GameEnricher
       .Select(l => l.Attribute("value")?.Value)
       .Where(v => !string.IsNullOrEmpty(v))
       .ToList();
-    if (designers.Any())
+    if (designers.Count != 0)
       game.Designers = designers!;
 
     // Artists - Extract all boardgameartist links
@@ -68,7 +68,7 @@ public class GameEnricher
       .Select(l => l.Attribute("value")?.Value)
       .Where(v => !string.IsNullOrEmpty(v))
     .ToList();
-    if (artists.Any())
+    if (artists.Count != 0)
       game.Artists = artists!;
 
     // Publishers - Extract all boardgamepublisher links
@@ -77,7 +77,7 @@ public class GameEnricher
       .Select(l => l.Attribute("value")?.Value)
       .Where(v => !string.IsNullOrEmpty(v))
   .ToList();
-    if (publishers.Any())
+    if (publishers.Count != 0)
       game.Publishers = publishers!;
 
     // Player Count Recommendations
@@ -95,7 +95,7 @@ public class GameEnricher
     if (playerCountPoll == null) return;
 
     // Extract detailed voting data for each player count
-    var recommendations = new List<PlayerCountRecommendation>();
+    List<PlayerCountRecommendation> recommendations = [];
 
     foreach (var result in playerCountPoll.Elements("results"))
     {
@@ -108,7 +108,10 @@ continue;
 
    var recommendation = new PlayerCountRecommendation
       {
-   NumPlayers = numPlayers
+   NumPlayers = numPlayers,
+        Best = 0,
+        Recommended = 0,
+        NotRecommended = 0
       };
 
       foreach (var voteResult in result.Elements("result"))

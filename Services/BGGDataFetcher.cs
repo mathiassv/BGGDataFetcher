@@ -6,40 +6,43 @@ using Microsoft.Extensions.Logging;
 
 namespace BGGDataFetcher;
 
-public class BGGDataFetcher
+public class BGGDataFetcher(
+  BggApiSettings settings,
+  ILogger<BGGDataFetcher> logger,
+  ILogger<BggApiClient> apiLogger,
+  ILogger<DataDumpReader> dataDumpLogger,
+  ILogger<FileManager> fileManagerLogger,
+  IConsoleOutput? output = null,
+  BGGDataFetcherSettings? fetcherSettings = null)
 {
-  private readonly HttpClient _httpClient;
-  private readonly BggApiClient _apiClient;
-  private readonly FileManager _fileManager;
-  private readonly DataDumpReader _dataDumpReader;
-  private readonly ILogger<BGGDataFetcher> _logger;
-  private readonly IConsoleOutput? _output;
+  private readonly HttpClient _httpClient = CreateHttpClient();
+  private readonly BggApiClient _apiClient = new(CreateHttpClient(), settings, apiLogger, fileManagerLogger, output);
+  private readonly FileManager _fileManager = new(fileManagerLogger);
+  private readonly DataDumpReader _dataDumpReader = new(dataDumpLogger);
+  private readonly ILogger<BGGDataFetcher> _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+  private readonly IConsoleOutput? _output = output;
+  private readonly BGGDataFetcherSettings? _settings = fetcherSettings;
 
   private const int API_BATCH_SIZE = 20; // Number of games to fetch details for in one API call
   private const int DELAY_MS = 1000; // Delay between API requests
 
-  public BGGDataFetcher(BggApiSettings settings, ILogger<BGGDataFetcher> logger, ILogger<BggApiClient> apiLogger, ILogger<DataDumpReader> dataDumpLogger, ILogger<FileManager> fileManagerLogger, IConsoleOutput? output = null)
+  private static HttpClient CreateHttpClient()
   {
-    _httpClient = new HttpClient();
-    _httpClient.DefaultRequestHeaders.Add("Accept", "application/xml");
-    _httpClient.DefaultRequestHeaders.Add("Accept-Language", "en-US,en;q=0.5");
-
-    _logger = logger;
- _output = output;
-    _apiClient = new BggApiClient(_httpClient, settings, apiLogger, fileManagerLogger, output);
-    _fileManager = new FileManager(fileManagerLogger);
-    _dataDumpReader = new DataDumpReader(dataDumpLogger);
+    var httpClient = new HttpClient();
+    httpClient.DefaultRequestHeaders.Add("Accept", "application/xml");
+    httpClient.DefaultRequestHeaders.Add("Accept-Language", "en-US,en;q=0.5");
+    return httpClient;
   }
 
-  public List<BoardGameBasic> FetchTopGamesFromDataDump(int count, string dataDumpFileName, string saveFileName = "TopGames.json")
+  public async Task<List<BoardGameBasic>> FetchTopGamesFromDataDumpAsync(int count, string dataDumpFileName, string saveFileName = "TopGames.json")
   {
- _logger.LogInformation("Fetching top {Count} ranked games from data dump...", count);
+    _logger.LogInformation("Fetching top {Count} ranked games from data dump...", count);
 
     // Read from data dump
     var basicGames = _dataDumpReader.ReadFromDataDump(dataDumpFileName, count);
 
     // Save basic game list
-    _fileManager.SaveBasicGamesToJson(basicGames, saveFileName);
+    await _fileManager.SaveBasicGamesToJsonAsync(basicGames, saveFileName);
 
     _logger.LogInformation("? Successfully fetched {Count} games!", basicGames.Count);
     _logger.LogInformation("Basic game data saved to {FileName}", saveFileName);
@@ -51,25 +54,37 @@ public class BGGDataFetcher
   {
     _logger.LogInformation("Fetching detailed information for {Count} games from BGG API...", basicGames.Count);
 
- // Enrich the data with detailed API information
+    // Enrich the data with detailed API information
     var detailedGames = await _apiClient.EnrichGamesWithDetailsAsync(basicGames, API_BATCH_SIZE, DELAY_MS, saveFileName);
 
-  // Save final detailed game data
-    _fileManager.SaveDetailedGamesToJson(detailedGames, saveFileName);
+    // Save final detailed game data
+    await _fileManager.SaveDetailedGamesToJsonAsync(detailedGames, saveFileName);
+
+    // Save individual JSON files if enabled
+    if (_settings?.SaveIndividualJsonFiles == true)
+    {
+      await _fileManager.SaveIndividualGameJsonFilesAsync(detailedGames, _settings.IndividualJsonOutputFolder);
+    }
 
     return detailedGames;
   }
 
   public async Task<List<BoardGameDetailed>> FetchGameDetailsAsync(List<BoardGameBasic> basicGames, string saveFileName, int startPosition)
   {
-  _logger.LogInformation("Fetching detailed information for {Count} games from BGG API...", basicGames.Count);
+    _logger.LogInformation("Fetching detailed information for {Count} games from BGG API...", basicGames.Count);
     _logger.LogInformation("Starting from position {Position}", startPosition);
 
     // Enrich the data with detailed API information
     var detailedGames = await _apiClient.EnrichGamesWithDetailsAsync(basicGames, API_BATCH_SIZE, DELAY_MS, saveFileName, startPosition);
 
     // Save final detailed game data
-    _fileManager.SaveDetailedGamesToJson(detailedGames, saveFileName);
+    await _fileManager.SaveDetailedGamesToJsonAsync(detailedGames, saveFileName);
+
+    // Save individual JSON files if enabled
+    if (_settings?.SaveIndividualJsonFiles == true)
+    {
+      await _fileManager.SaveIndividualGameJsonFilesAsync(detailedGames, _settings.IndividualJsonOutputFolder);
+    }
 
     return detailedGames;
   }
