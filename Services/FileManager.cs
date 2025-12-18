@@ -17,7 +17,7 @@ public class FileManager(ILogger<FileManager>? logger = null)
         };
 
         await using var stream = File.Create(fileName);
-        await JsonSerializer.SerializeAsync(stream, games.OrderBy(g => g.RankPos).ToList(), options);
+        await JsonSerializer.SerializeAsync(stream, games, options);
 
         _logger?.LogInformation("✓ Data saved to: {FileName}", fileName);
     }
@@ -48,7 +48,7 @@ public class FileManager(ILogger<FileManager>? logger = null)
         };
 
         await using var stream = File.Create(fileName);
-        await JsonSerializer.SerializeAsync(stream, games.OrderBy(g => g.RankPos).ToList(), options);
+        await JsonSerializer.SerializeAsync(stream, games, options);
 
         _logger?.LogInformation("✓ Data saved to: {FileName}", fileName);
     }
@@ -89,7 +89,7 @@ public class FileManager(ILogger<FileManager>? logger = null)
             try
             {
                 // Create a safe filename from the game ID and name
-                var safeFileName = $"{game.Id}.json";
+                var safeFileName = $"{game.RankPos}.json";
                 var filePath = Path.Combine(outputFolder, safeFileName);
 
                 await using var stream = File.Create(filePath);

@@ -38,7 +38,7 @@ public class DataDumpReader(ILogger<DataDumpReader>? logger = null)
       reader.ReadLine();
 
       int lineNumber = 1;
-      int rankPos = 1;
+      int rankPos = 0;
       while (!reader.EndOfStream && games.Count < count)
       {
         var line = reader.ReadLine();
