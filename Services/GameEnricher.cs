@@ -23,6 +23,10 @@ public class GameEnricher
         // Description
         game.Description = item.Element("description")?.Value?.Trim();
 
+        // Images
+        game.Thumbnail = item.Element("thumbnail")?.Value?.Trim();
+        game.Image = item.Element("image")?.Value?.Trim();
+
         // Min/Max Players
         game.MinPlayers = (int?)item.Element("minplayers")?.Attribute("value");
         game.MaxPlayers = (int?)item.Element("maxplayers")?.Attribute("value");
@@ -102,6 +106,9 @@ public class GameEnricher
             var numPlayersStr = result.Attribute("numplayers")?.Value;
             if (string.IsNullOrEmpty(numPlayersStr)) continue;
 
+            // Check if this is a "X+" range (e.g., "4+")
+            bool isOrMore = numPlayersStr.EndsWith('+');
+
             // Parse numPlayers - handle "4+" by taking just the number
             if (!int.TryParse(numPlayersStr.TrimEnd('+'), out int numPlayers))
                 continue;
@@ -109,6 +116,7 @@ public class GameEnricher
             var recommendation = new PlayerCountRecommendation
             {
                 NumPlayers = numPlayers,
+                IsOrMore = isOrMore,
                 Best = 0,
                 Recommended = 0,
                 NotRecommended = 0
@@ -133,17 +141,20 @@ public class GameEnricher
         game.PlayerCountRecommendations = recommendations;
 
         // Calculate best and recommended player counts from voting data
+        // Exclude "X+" entries as they represent edge cases
+        var regularRecommendations = recommendations.Where(r => !r.IsOrMore).ToList();
+
         // Best = highest number of "Best" votes
-        var bestPlayerCount = recommendations
+        var bestPlayerCount = regularRecommendations
             .OrderByDescending(r => r.Best)
-       .FirstOrDefault();
+            .FirstOrDefault();
         if (bestPlayerCount != null && bestPlayerCount.Best > 0)
             game.BestPlayerCount = bestPlayerCount.NumPlayers;
 
         // Recommended = highest combined "Best" + "Recommended" votes
-        var recommendedPlayerCount = recommendations
-          .OrderByDescending(r => r.Best + r.Recommended)
-          .FirstOrDefault();
+        var recommendedPlayerCount = regularRecommendations
+            .OrderByDescending(r => r.Best + r.Recommended)
+            .FirstOrDefault();
         if (recommendedPlayerCount != null && (recommendedPlayerCount.Best + recommendedPlayerCount.Recommended) > 0)
             game.RecommendedPlayerCount = recommendedPlayerCount.NumPlayers;
     }
@@ -171,6 +182,10 @@ public class GameEnricher
         var stdDevValue = ratings.Element("stddev")?.Attribute("value")?.Value;
         if (stdDevValue != null && double.TryParse(stdDevValue, NumberStyles.Float, CultureInfo.InvariantCulture, out double stdDev))
             game.StandardDeviation = stdDev;
+
+        var medianValue = ratings.Element("median")?.Attribute("value")?.Value;
+        if (medianValue != null && double.TryParse(medianValue, NumberStyles.Float, CultureInfo.InvariantCulture, out double median))
+            game.Median = median;
 
         // Rank
         var rankElement = ratings.Element("ranks")

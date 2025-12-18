@@ -28,6 +28,8 @@ public class BoardGameDetailed
 
   // Detailed properties
   public string? Description { get; set; }
+  public string? Thumbnail { get; set; }
+  public string? Image { get; set; }
   public int? MinPlayers { get; set; }
   public int? MaxPlayers { get; set; }
   public int? MinPlayTime { get; set; }
@@ -35,6 +37,7 @@ public class BoardGameDetailed
   public int? PlayingTime { get; set; }
   public int? MinAge { get; set; }
   public double? StandardDeviation { get; set; }
+  public double? Median { get; set; }
   public int? Owned { get; set; }
   public int? Trading { get; set; }
   public int? Wanting { get; set; }
