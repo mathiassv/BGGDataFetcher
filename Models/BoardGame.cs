@@ -11,8 +11,20 @@ public class BoardGameDetailed
   public required int NumId { get; set; }
   public required string Name { get; set; }
   public required int YearPublished { get; set; }
+  public int RankPos { get; set; }
   public int? Rank { get; set; }
   public double? BayesAverage { get; set; }
+  public double? Average { get; set; }
+  public int? UsersRated { get; set; }
+  public bool IsExpansion { get; set; }
+  public int? AbstractsRank { get; set; }
+  public int? CgsRank { get; set; }
+  public int? ChildrensGamesRank { get; set; }
+  public int? FamilyGamesRank { get; set; }
+  public int? PartyGamesRank { get; set; }
+  public int? StrategyGamesRank { get; set; }
+  public int? ThematicRank { get; set; }
+  public int? WarGamesRank { get; set; }
 
   // Detailed properties
   public string? Description { get; set; }
@@ -22,8 +34,6 @@ public class BoardGameDetailed
   public int? MaxPlayTime { get; set; }
   public int? PlayingTime { get; set; }
   public int? MinAge { get; set; }
-  public int? UsersRated { get; set; }
-  public double? Average { get; set; }
   public double? StandardDeviation { get; set; }
   public int? Owned { get; set; }
   public int? Trading { get; set; }

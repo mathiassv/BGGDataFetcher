@@ -102,13 +102,40 @@ public class BggApiClient(
             detailedGame.Name = basicGame.Name;
         if (detailedGame.YearPublished == 0)
             detailedGame.YearPublished = basicGame.YearPublished;
+        if (detailedGame.RankPos == 0)
+            detailedGame.RankPos = basicGame.RankPos;
         if (!detailedGame.Rank.HasValue)
             detailedGame.Rank = basicGame.Rank;
         if (!detailedGame.BayesAverage.HasValue)
             detailedGame.BayesAverage = basicGame.BayesAverage;
+        if (!detailedGame.Average.HasValue)
+            detailedGame.Average = basicGame.Average;
+        if (!detailedGame.UsersRated.HasValue)
+            detailedGame.UsersRated = basicGame.UsersRated;
+        
         // Ensure NumId is set from basic game if not already set
         if (detailedGame.NumId == 0)
             detailedGame.NumId = basicGame.NumId;
+
+        // Merge expansion flag and category ranks
+        detailedGame.IsExpansion = basicGame.IsExpansion;
+        
+        if (!detailedGame.AbstractsRank.HasValue)
+            detailedGame.AbstractsRank = basicGame.AbstractsRank;
+        if (!detailedGame.CgsRank.HasValue)
+            detailedGame.CgsRank = basicGame.CgsRank;
+        if (!detailedGame.ChildrensGamesRank.HasValue)
+            detailedGame.ChildrensGamesRank = basicGame.ChildrensGamesRank;
+        if (!detailedGame.FamilyGamesRank.HasValue)
+            detailedGame.FamilyGamesRank = basicGame.FamilyGamesRank;
+        if (!detailedGame.PartyGamesRank.HasValue)
+            detailedGame.PartyGamesRank = basicGame.PartyGamesRank;
+        if (!detailedGame.StrategyGamesRank.HasValue)
+            detailedGame.StrategyGamesRank = basicGame.StrategyGamesRank;
+        if (!detailedGame.ThematicRank.HasValue)
+            detailedGame.ThematicRank = basicGame.ThematicRank;
+        if (!detailedGame.WarGamesRank.HasValue)
+            detailedGame.WarGamesRank = basicGame.WarGamesRank;
     }
 
     private void EnrichBatchWithBasicInfo(List<BoardGameDetailed> batchDetailedGames, List<BoardGameBasic> batch)

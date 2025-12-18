@@ -17,7 +17,7 @@ public class FileManager(ILogger<FileManager>? logger = null)
         };
 
         await using var stream = File.Create(fileName);
-        await JsonSerializer.SerializeAsync(stream, games.OrderBy(g => g.Rank ?? int.MaxValue).ToList(), options);
+        await JsonSerializer.SerializeAsync(stream, games.OrderBy(g => g.RankPos).ToList(), options);
 
         _logger?.LogInformation("✓ Data saved to: {FileName}", fileName);
     }
@@ -48,7 +48,7 @@ public class FileManager(ILogger<FileManager>? logger = null)
         };
 
         await using var stream = File.Create(fileName);
-        await JsonSerializer.SerializeAsync(stream, games.OrderBy(g => g.Rank ?? int.MaxValue).ToList(), options);
+        await JsonSerializer.SerializeAsync(stream, games.OrderBy(g => g.RankPos).ToList(), options);
 
         _logger?.LogInformation("✓ Data saved to: {FileName}", fileName);
     }
@@ -69,6 +69,21 @@ public class FileManager(ILogger<FileManager>? logger = null)
         };
 
         int savedCount = 0;
+        int totalCount = games.Count;
+        const int LargeBatchThreshold = 1000;
+        const int MediumBatchThreshold = 100;
+        const int ProgressIntervalLarge = 100;
+        const int ProgressIntervalMedium = 10;
+        const int ProgressIntervalSmall = 1;
+
+        int progressInterval = totalCount >= LargeBatchThreshold
+            ? ProgressIntervalLarge
+            : totalCount >= MediumBatchThreshold
+                ? ProgressIntervalMedium
+                : ProgressIntervalSmall;
+
+        _logger?.LogInformation("Saving {TotalCount} individual game files...", totalCount);
+
         foreach (var game in games)
         {
             try
@@ -80,6 +95,13 @@ public class FileManager(ILogger<FileManager>? logger = null)
                 await using var stream = File.Create(filePath);
                 await JsonSerializer.SerializeAsync(stream, game, options);
                 savedCount++;
+
+                // Log progress at intervals
+                if (savedCount % progressInterval == 0 || savedCount == totalCount)
+                {
+                    _logger?.LogInformation("  Progress: {SavedCount}/{TotalCount} files saved ({Percentage:F1}%)",
+                        savedCount, totalCount, (savedCount * 100.0) / totalCount);
+                }
             }
             catch (Exception ex)
             {

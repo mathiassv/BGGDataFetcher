@@ -26,6 +26,9 @@
     <None Update="Data\boardgames_ranks_2025-11-07.zip">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+    <None Update="Data\boardgames_ranks_2025-12-18.zip">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 
   <ItemGroup>

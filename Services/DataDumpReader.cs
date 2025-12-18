@@ -38,6 +38,7 @@ public class DataDumpReader(ILogger<DataDumpReader>? logger = null)
       reader.ReadLine();
 
       int lineNumber = 1;
+      int rankPos = 1;
       while (!reader.EndOfStream && games.Count < count)
       {
         var line = reader.ReadLine();
@@ -48,7 +49,8 @@ public class DataDumpReader(ILogger<DataDumpReader>? logger = null)
 
         try
         {
-          var game = ParseCsvLine(line);
+          rankPos++; // Increment rank position( even if ParseCsvLine return null. this should be in sync with the data dump)
+          var game = ParseCsvLine(line, rankPos);
           if (game != null)
           {
             games.Add(game);
@@ -65,13 +67,13 @@ public class DataDumpReader(ILogger<DataDumpReader>? logger = null)
     return games;
   }
 
-  private BoardGameBasic? ParseCsvLine(string line)
+  private BoardGameBasic? ParseCsvLine(string line, int rankPos)
   {
-    // CSV format: id,name,yearpublished,rank,bayesaverage,average,usersrated,...
+    // CSV format: id,name,yearpublished,rank,bayesaverage,average,usersrated,is_expansion,abstracts_rank,cgs_rank,childrensgames_rank,familygames_rank,partygames_rank,strategygames_rank,thematic_rank,wargames_rank
     // Handle quoted fields (names can contain commas)
     var fields = ParseCsvFields(line);
 
-    if (fields.Count < 7)
+    if (fields.Count < 16)
       return null;
 
     try
@@ -81,10 +83,22 @@ public class DataDumpReader(ILogger<DataDumpReader>? logger = null)
       {
         Id = idString,
         NumId = int.Parse(idString, System.Globalization.CultureInfo.InvariantCulture),
-        Name = fields[1].Trim('"'), // Remove quotes from name
+        Name = fields[1].Trim('"'),
         YearPublished = int.Parse(fields[2], System.Globalization.CultureInfo.InvariantCulture),
         Rank = string.IsNullOrEmpty(fields[3]) ? null : int.Parse(fields[3], System.Globalization.CultureInfo.InvariantCulture),
-        BayesAverage = string.IsNullOrEmpty(fields[4]) ? null : double.Parse(fields[4], System.Globalization.CultureInfo.InvariantCulture)
+        BayesAverage = string.IsNullOrEmpty(fields[4]) ? null : double.Parse(fields[4], System.Globalization.CultureInfo.InvariantCulture),
+        Average = string.IsNullOrEmpty(fields[5]) ? null : double.Parse(fields[5], System.Globalization.CultureInfo.InvariantCulture),
+        UsersRated = string.IsNullOrEmpty(fields[6]) ? null : int.Parse(fields[6], System.Globalization.CultureInfo.InvariantCulture),
+        IsExpansion = fields[7].Trim() == "1",
+        AbstractsRank = string.IsNullOrEmpty(fields[8]) ? null : int.Parse(fields[8], System.Globalization.CultureInfo.InvariantCulture),
+        CgsRank = string.IsNullOrEmpty(fields[9]) ? null : int.Parse(fields[9], System.Globalization.CultureInfo.InvariantCulture),
+        ChildrensGamesRank = string.IsNullOrEmpty(fields[10]) ? null : int.Parse(fields[10], System.Globalization.CultureInfo.InvariantCulture),
+        FamilyGamesRank = string.IsNullOrEmpty(fields[11]) ? null : int.Parse(fields[11], System.Globalization.CultureInfo.InvariantCulture),
+        PartyGamesRank = string.IsNullOrEmpty(fields[12]) ? null : int.Parse(fields[12], System.Globalization.CultureInfo.InvariantCulture),
+        StrategyGamesRank = string.IsNullOrEmpty(fields[13]) ? null : int.Parse(fields[13], System.Globalization.CultureInfo.InvariantCulture),
+        ThematicRank = string.IsNullOrEmpty(fields[14]) ? null : int.Parse(fields[14], System.Globalization.CultureInfo.InvariantCulture),
+        WarGamesRank = string.IsNullOrEmpty(fields[15]) ? null : int.Parse(fields[15], System.Globalization.CultureInfo.InvariantCulture),
+        RankPos = rankPos
       };
 
       return game;
