@@ -1,347 +1,137 @@
-﻿using BGGDataFetcher.Models;
-using BGGDataFetcher.Configuration;
+﻿using System.Net;
 using BGGDataFetcher.Interfaces;
+using BGGDataFetcher.Models;
 using Microsoft.Extensions.Logging;
 
 namespace BGGDataFetcher.Services;
 
 public class BggApiClient(
   HttpClient httpClient,
-  BggApiSettings settings,
+  XmlProcessor xmlProcessor,
+  ErrorLog errorLog,
   ILogger<BggApiClient> logger,
-  ILogger<FileManager> fileManagerLogger,
-  IConsoleOutput? output = null)
+  IConsoleOutput output)
 {
-    private readonly HttpClient _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
-    private readonly XmlProcessor _xmlProcessor = new(logger);
-    private readonly FileManager _fileManager = new(fileManagerLogger);
-    private readonly ILogger<BggApiClient> _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-    private readonly IConsoleOutput? _output = output;
-    private readonly string _bearerToken = settings?.BearerToken ?? throw new ArgumentNullException(nameof(settings));
-
     private const string BGG_API_BASE = "https://boardgamegeek.com/xmlapi2";
-    private const int SAVE_INTERVAL = 300; // Save progress every 300 games
-    private const string ERROR_LOG_FILE = "bgg_errors.log";
-    private const int RATE_LIMIT_PAUSE_MS = 5000;
-    private const int DELAY_INCREMENT_MS = 500;
+    private const int MAX_ATTEMPTS = 6;
+    private const double MIN_RETRY_DELAY_SECONDS = 1;
+    private const int SPLIT_DELAY_MS = 1000; // pause between the requests of a split batch
+    private static readonly TimeSpan MaxRetryDelay = TimeSpan.FromMinutes(2);
 
-    private void LogInfo(string message, params object[] args)
+    /// <summary>
+    /// Fetches details for the given game IDs. Transient failures (429, 5xx, timeouts, queued/empty responses)
+    /// are retried with backoff; IDs that still could not be fetched are simply missing from the result.
+    /// </summary>
+    public async Task<List<BoardGameDetailed>> FetchGameDetailsBatchAsync(IReadOnlyList<string> gameIds, CancellationToken ct = default)
     {
-        _logger.LogInformation(message, args);
-        _output?.WriteInfo(message, args);
-    }
+        var url = $"{BGG_API_BASE}/thing?id={string.Join(",", gameIds)}&stats=1";
 
-    private void LogWarning(string message, params object[] args)
-    {
-        _logger.LogWarning(message, args);
-        _output?.WriteWarning(message, args);
-    }
-
-    private void LogDebug(string message, params object[] args)
-    {
-        _logger.LogDebug(message, args);
-        _output?.WriteDebug(message, args);
-    }
-
-    private async Task LogErrorAsync(string message)
-    {
-        var timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
-        var logMessage = $"[{timestamp}] {message}{Environment.NewLine}";
-        await File.AppendAllTextAsync(ERROR_LOG_FILE, logMessage);
-        _logger.LogError("{Message}", message);
-    }
-
-    private async Task<string> FetchXmlFromApiAsync(string url)
-    {
-        var request = new HttpRequestMessage(HttpMethod.Get, url);
-        request.Headers.Add("Authorization", $"Bearer {_bearerToken}");
-
-        var response = await _httpClient.SendAsync(request);
-        response.EnsureSuccessStatusCode();
-
-        return await response.Content.ReadAsStringAsync();
-    }
-
-    private string BuildApiUrl(List<string> gameIds)
-    {
-        var ids = string.Join(",", gameIds);
-        return $"{BGG_API_BASE}/thing?id={ids}&stats=1";
-    }
-
-    private async Task<List<BoardGameDetailed>> SplitAndRetryBatchAsync(List<string> gameIds, string ids, Exception ex)
-    {
-        await LogErrorAsync($"XML parsing error for game IDs [{string.Join(", ", gameIds)}]: {ex.Message}");
-        LogWarning("XML parsing failed for batch of {Count} games [{GameIds}], splitting into smaller batches...",
-          gameIds.Count, ids);
-
-        var midpoint = gameIds.Count / 2;
-        var firstHalf = gameIds.Take(midpoint).ToList();
-        var secondHalf = gameIds.Skip(midpoint).ToList();
-
-        LogInfo("  Splitting batch: First half ({Count} games), Second half ({Count2} games)",
-        firstHalf.Count, secondHalf.Count);
-
-        // Recursively fetch both halves
-        var firstResults = await FetchGameDetailsBatchAsync(firstHalf);
-        var secondResults = await FetchGameDetailsBatchAsync(secondHalf);
-
-        // Combine results
-        List<BoardGameDetailed> combinedResults = [];
-        combinedResults.AddRange(firstResults);
-        combinedResults.AddRange(secondResults);
-        return combinedResults;
-    }
-
-    #region Game Enrichment Methods
-
-    private void MergeBasicInfoIntoDetailedGame(BoardGameDetailed detailedGame, BoardGameBasic basicGame)
-    {
-        // The API data takes precedence, but we can ensure basic data is present
-        // The enricher already sets these, but this is a safety net
-        if (string.IsNullOrEmpty(detailedGame.Name))
-            detailedGame.Name = basicGame.Name;
-        if (detailedGame.YearPublished == 0)
-            detailedGame.YearPublished = basicGame.YearPublished;
-        if (detailedGame.RankPos == 0)
-            detailedGame.RankPos = basicGame.RankPos;
-        if (!detailedGame.Rank.HasValue)
-            detailedGame.Rank = basicGame.Rank;
-        if (!detailedGame.BayesAverage.HasValue)
-            detailedGame.BayesAverage = basicGame.BayesAverage;
-        if (!detailedGame.Average.HasValue)
-            detailedGame.Average = basicGame.Average;
-        if (!detailedGame.UsersRated.HasValue)
-            detailedGame.UsersRated = basicGame.UsersRated;
-        
-        // Ensure NumId is set from basic game if not already set
-        if (detailedGame.NumId == 0)
-            detailedGame.NumId = basicGame.NumId;
-
-        // Merge expansion flag and category ranks
-        detailedGame.IsExpansion = basicGame.IsExpansion;
-        
-        if (!detailedGame.AbstractsRank.HasValue)
-            detailedGame.AbstractsRank = basicGame.AbstractsRank;
-        if (!detailedGame.CgsRank.HasValue)
-            detailedGame.CgsRank = basicGame.CgsRank;
-        if (!detailedGame.ChildrensGamesRank.HasValue)
-            detailedGame.ChildrensGamesRank = basicGame.ChildrensGamesRank;
-        if (!detailedGame.FamilyGamesRank.HasValue)
-            detailedGame.FamilyGamesRank = basicGame.FamilyGamesRank;
-        if (!detailedGame.PartyGamesRank.HasValue)
-            detailedGame.PartyGamesRank = basicGame.PartyGamesRank;
-        if (!detailedGame.StrategyGamesRank.HasValue)
-            detailedGame.StrategyGamesRank = basicGame.StrategyGamesRank;
-        if (!detailedGame.ThematicRank.HasValue)
-            detailedGame.ThematicRank = basicGame.ThematicRank;
-        if (!detailedGame.WarGamesRank.HasValue)
-            detailedGame.WarGamesRank = basicGame.WarGamesRank;
-    }
-
-    private void EnrichBatchWithBasicInfo(List<BoardGameDetailed> batchDetailedGames, List<BoardGameBasic> batch)
-    {
-        foreach (var detailedGame in batchDetailedGames)
+        var xmlContent = await GetXmlWithRetryAsync(url, ct);
+        if (xmlContent == null)
         {
-            var basicGame = batch.FirstOrDefault(g => g.Id == detailedGame.Id);
-            if (basicGame != null)
-            {
-                MergeBasicInfoIntoDetailedGame(detailedGame, basicGame);
-            }
-        }
-    }
-
-    #endregion
-
-    #region Progress Saving Methods
-
-    private bool ShouldSaveProgress(int detailedGamesCount, int processedCount, int batchSize)
-    {
-        if (detailedGamesCount % SAVE_INTERVAL != 0 &&
-            detailedGamesCount < SAVE_INTERVAL * (detailedGamesCount / SAVE_INTERVAL + 1))
-            return false;
-
-        var checkpointCount = (processedCount / SAVE_INTERVAL) * SAVE_INTERVAL;
-        return checkpointCount > 0 &&
-                  processedCount >= checkpointCount &&
-                  processedCount % SAVE_INTERVAL < batchSize;
-    }
-
-    private async Task SaveProgressAsync(List<BoardGameDetailed> detailedGames, string saveFileName, int processedCount)
-    {
-        var progressFileName = saveFileName.Replace(".json", $"_progress_{processedCount}.json");
-        await _fileManager.SaveDetailedGamesToJsonAsync(detailedGames, progressFileName);
-        LogInfo("  💾 Progress saved to {FileName} ({Count} games processed)", progressFileName, processedCount);
-    }
-
-    #endregion
-
-    #region Batch Processing Methods
-
-    private async Task<List<BoardGameDetailed>> FetchSingleGameAsync(string gameId)
-    {
-        var url = BuildApiUrl([gameId]);
-
-        try
-        {
-            var xmlContent = await FetchXmlFromApiAsync(url);
-            var games = await _xmlProcessor.TryProcessXmlGamesAsync(xmlContent, async msg => await LogErrorAsync(msg), LogWarning);
-            return games ?? [];
-        }
-        catch (Exception ex)
-        {
-            await LogErrorAsync($"Failed to fetch game ID {gameId}: {ex.GetType().Name} - {ex.Message}");
-            LogWarning("Skipping game ID {GameId} due to persistent errors", gameId);
+            errorLog.Write($"Giving up on game IDs [{string.Join(", ", gameIds)}] after {MAX_ATTEMPTS} attempts");
             return [];
         }
-    }
 
-    public async Task<List<BoardGameDetailed>> FetchGameDetailsBatchAsync(List<string> gameIds)
-    {
-        // Base case: if only one game ID and it fails, return empty list
-        if (gameIds.Count == 1)
+        var games = xmlProcessor.TryProcessXmlGames(xmlContent, errorLog.Write);
+        if (games != null)
         {
-            return await FetchSingleGameAsync(gameIds[0]);
-        }
-
-        // Try to fetch all game IDs in one batch
-        var ids = string.Join(",", gameIds);
-        var batchUrl = BuildApiUrl(gameIds);
-
-        try
-        {
-            var xmlContent = await FetchXmlFromApiAsync(batchUrl);
-
-            // Try to parse and process XML
-            var games = await _xmlProcessor.TryProcessXmlGamesAsync(xmlContent, async msg => await LogErrorAsync(msg), LogWarning);
-
-            if (games == null)
-            {
-                // XML parsing failed - split batch in half and retry
-                return await SplitAndRetryBatchAsync(gameIds, ids, new Exception("XML parsing failed"));
-            }
-
             return games;
         }
-        catch (HttpRequestException)
+
+        // The response is XML-like but broken - narrow down which game(s) cause it
+        if (gameIds.Count == 1)
         {
-            // HTTP request failed - rethrow to let caller handle
-            throw;
-        }
-    }
-
-    private async Task<(int newDelay, bool shouldRetry)> HandleRateLimitAsync(
-      int batchIndex,
-      int totalBatches,
-      int startPosition,
-    int batchSize,
-      int basicGamesCount,
-  int currentDelay)
-    {
-        var errorMsg = $"Rate limited (429) at batch {batchIndex + 1}/{totalBatches}, " +
-            $"games {startPosition + (batchIndex * batchSize) + 1} to " +
-            $"{Math.Min(startPosition + ((batchIndex + 1) * batchSize), basicGamesCount)}";
-
-        await LogErrorAsync(errorMsg);
-        LogWarning("  ⚠ Rate limited (429) - Pausing for {Delay} seconds...", RATE_LIMIT_PAUSE_MS / 1000);
-
-        await Task.Delay(RATE_LIMIT_PAUSE_MS);
-
-        // Increase delay
-        var newDelay = currentDelay + DELAY_INCREMENT_MS;
-        LogInfo("  ℹ Increased delay to {Delay}ms for subsequent requests", newDelay);
-
-        return (newDelay, true); // Return new delay and indicate retry
-    }
-
-    private async Task HandleBatchErrorAsync(Exception ex, int batchIndex, int totalBatches, List<BoardGameBasic> batch)
-    {
-        var gameIds = batch.Select(g => g.Id).ToList();
-        var errorMsg = $"Failed to fetch batch {batchIndex + 1}/{totalBatches}, " +
-                $"game IDs [{string.Join(", ", gameIds)}]: {ex.GetType().Name} - {ex.Message}";
-
-        await LogErrorAsync(errorMsg);
-
-        if (ex.InnerException != null)
-        {
-            await LogErrorAsync($"Inner exception: {ex.InnerException.Message}");
+            errorLog.Write($"XML parsing failed for game ID {gameIds[0]}, skipping it");
+            return [];
         }
 
-        LogWarning("  ⚠ Warning: Could not fetch detailed data for batch - {ErrorMessage}", ex.Message);
-        LogInfo("  Error logged to {LogFile}", ERROR_LOG_FILE);
+        errorLog.Write($"XML parsing error for game IDs [{string.Join(", ", gameIds)}], splitting batch");
+        logger.WarnAndShow(output, "XML parsing failed for a batch of {Count} games, splitting into smaller batches...", gameIds.Count);
+
+        var midpoint = gameIds.Count / 2;
+        List<BoardGameDetailed> combined = [];
+        combined.AddRange(await FetchGameDetailsBatchAsync(gameIds.Take(midpoint).ToList(), ct));
+        await Task.Delay(SPLIT_DELAY_MS, ct);
+        combined.AddRange(await FetchGameDetailsBatchAsync(gameIds.Skip(midpoint).ToList(), ct));
+        return combined;
     }
 
-    #endregion
-
-    public async Task<List<BoardGameDetailed>> EnrichGamesWithDetailsAsync(
-      List<BoardGameBasic> basicGames,
-      int batchSize,
-      int delayMs,
-      string saveFileName,
-      int startPosition = 0)
+    /// <summary>Returns the response body, or null if all attempts failed.</summary>
+    private async Task<string?> GetXmlWithRetryAsync(string url, CancellationToken ct)
     {
-        LogInfo("Fetching detailed game information from BGG API...");
-
-        List<BoardGameDetailed> detailedGames = [];
-        var gamesToProcess = basicGames.Skip(startPosition).ToList();
-        var totalBatches = (int)Math.Ceiling(gamesToProcess.Count / (double)batchSize);
-        var currentDelay = delayMs;
-        var processedCount = startPosition;
-
-        for (int i = 0; i < totalBatches; i++)
+        for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++)
         {
-            var batch = gamesToProcess.Skip(i * batchSize).Take(batchSize).ToList();
+            TimeSpan delay;
+            string reason;
 
             try
             {
-                var batchStart = startPosition + (i * batchSize) + 1;
-                var batchEnd = Math.Min(startPosition + ((i + 1) * batchSize), basicGames.Count);
-                LogInfo("[Batch {BatchNum}/{TotalBatches}] Fetching detailed info for games {Start} to {End}...", i + 1, totalBatches, batchStart, batchEnd);
+                using var response = await httpClient.GetAsync(url, ct);
 
-                var ids = batch.Select(g => g.Id).ToList();
-                var batchDetailedGames = await FetchGameDetailsBatchAsync(ids);
-
-                // Enrich with basic info
-                EnrichBatchWithBasicInfo(batchDetailedGames, batch);
-
-                detailedGames.AddRange(batchDetailedGames);
-                processedCount += batchDetailedGames.Count;
-                LogInfo("  ✓ Fetched detailed info for {Count} games (Total processed: {Total})", batchDetailedGames.Count, processedCount);
-
-                // Save progress if needed
-                if (ShouldSaveProgress(detailedGames.Count, processedCount, batchSize))
+                if (response.IsSuccessStatusCode)
                 {
-                    await SaveProgressAsync(detailedGames, saveFileName, processedCount);
+                    var body = await response.Content.ReadAsStringAsync(ct);
+
+                    // 202 means "queued, try again later"; an empty or non-XML body is a notice page, not data
+                    if (response.StatusCode != HttpStatusCode.Accepted && body.Contains("<items", StringComparison.Ordinal))
+                    {
+                        return body;
+                    }
+
+                    reason = response.StatusCode == HttpStatusCode.Accepted ? "202 Accepted (queued)" : "empty or non-XML response";
+                    delay = GetBackoff(attempt);
                 }
-
-                // Delay before next request
-                if (i < totalBatches - 1)
+                else if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
                 {
-                    await Task.Delay(currentDelay);
+                    throw new UnauthorizedAccessException(
+                      $"BGG API rejected the bearer token ({(int)response.StatusCode} {response.StatusCode}). Check BggApi:BearerToken.");
+                }
+                else if (!IsTransient(response.StatusCode))
+                {
+                    errorLog.Write($"Request failed with {(int)response.StatusCode} {response.StatusCode}: {url}");
+                    return null;
+                }
+                else
+                {
+                    reason = $"{(int)response.StatusCode} {response.StatusCode}";
+                    delay = GetRetryAfter(response) ?? GetBackoff(attempt);
                 }
             }
-            catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
+            catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException && !ct.IsCancellationRequested)
             {
-                var (newDelay, shouldRetry) = await HandleRateLimitAsync(i, totalBatches, startPosition, batchSize, basicGames.Count, currentDelay);
-                currentDelay = newDelay;
-                if (shouldRetry)
-                {
-                    i--; // Retry the same batch
-                }
+                reason = ex.GetType().Name + ": " + ex.Message;
+                delay = GetBackoff(attempt);
             }
-            catch (Exception ex)
+
+            if (attempt == MAX_ATTEMPTS)
             {
-                await HandleBatchErrorAsync(ex, i, totalBatches, batch);
+                errorLog.Write($"Attempt {attempt}/{MAX_ATTEMPTS} failed ({reason}): {url}");
+                break;
             }
+
+            // Retry-After can be zero or a date in the past: never retry without a pause, never wait longer than the cap
+            delay = TimeSpan.FromSeconds(Math.Clamp(delay.TotalSeconds, MIN_RETRY_DELAY_SECONDS, MaxRetryDelay.TotalSeconds));
+
+            logger.WarnAndShow(output, "  ⚠ Request failed ({Reason}) - retrying in {Delay:F0}s (attempt {Attempt}/{Max})",
+              reason, delay.TotalSeconds, attempt, MAX_ATTEMPTS);
+            await Task.Delay(delay, ct);
         }
 
-        LogInfo("Detailed enrichment completed!");
-        LogInfo("Total games processed: {Count}", processedCount);
-        if (startPosition > 0)
-        {
-            LogInfo("Note: Started from position {Position}. To get complete data, merge with previous progress files.",
-                    startPosition);
-        }
+        return null;
+    }
 
-        return detailedGames;
+    private static bool IsTransient(HttpStatusCode status) =>
+      status is HttpStatusCode.TooManyRequests or HttpStatusCode.RequestTimeout || (int)status >= 500;
+
+    private static TimeSpan GetBackoff(int attempt) =>
+      TimeSpan.FromSeconds(Math.Min(60, 5 * Math.Pow(2, attempt - 1)) + Random.Shared.NextDouble());
+
+    private static TimeSpan? GetRetryAfter(HttpResponseMessage response)
+    {
+        var retryAfter = response.Headers.RetryAfter;
+        if (retryAfter?.Delta is { } delta) return delta;
+        if (retryAfter?.Date is { } date) return date - DateTimeOffset.UtcNow;
+        return null;
     }
 }

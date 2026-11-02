@@ -17,8 +17,8 @@ A .NET 9 console application that collects detailed information about top-ranked
 - **Flexible Workflow**: Use data dump or load from existing files
 - **Secure**: Uses .NET User Secrets for API token management
 - **Dual Logging**: Clean console output + detailed file logging
-- **Error Recovery**: Automatic batch splitting and retry logic
-- **Progress Tracking**: Auto-save every 300 games with resume capability
+- **Error Recovery**: Retries with backoff on rate limiting / server errors (honors `Retry-After`) and automatic batch splitting on bad XML
+- **Progress Tracking**: Every batch is appended to a `.jsonl` file; re-running resumes automatically and retries failures
 
 ## 🚀 Getting Started
 
@@ -111,9 +111,10 @@ The application requires BGG's official ranked games data dump file to get game 
    - **Important**: You must be logged in or the page will show "Access Denied"
 
 4. **Place the File in Your Project**
-   - Save the downloaded ZIP file to your project directory (same folder as `BGGDataFetcher.csproj`)
-   - The default expected filename is `boardgames_ranks_2025-11-07.zip`
-   - You can use a different filename by updating `DataDumpFileName` in `BGGDataFetcher.json`
+   - Save the downloaded ZIP file in the `Data` folder (keep the date in the file name)
+   - The app automatically uses the file with the newest date in its name (`Data/boardgames_ranks_*.zip`), so you do not need to change any configuration when you download a newer dump
+   - To pin a specific dump, set `DataDumpFileName` in `BGGDataFetcher.json` to the exact file name
+   - Or let the script do the download: log in, right-click **Click to Download** -> *Copy link address*, then run `.\download-dump.ps1 -Url '<link>'` (single quotes, the link contains `&`). The link is only valid for 10 minutes and the API bearer token cannot be used for this page
 
 ### Data Dump Contents
 
@@ -153,9 +154,8 @@ Edit `BGGDataFetcher.json` to control the application's behavior:
   },
   "Settings": {
     "LoadFromFile": false,
-    "DataDumpFileName": "boardgames_ranks_2025-11-07.zip",
+    "DataDumpFileName": "Data/boardgames_ranks_*.zip",
     "Count": 100,
-"StartPosition": 0,
     "LoadFileName": "TopGames.json",
     "SaveBasicFileName": "TopGames.json",
     "SaveDetailedFileName": "TopGamesDetailed.json",
@@ -168,14 +168,16 @@ Edit `BGGDataFetcher.json` to control the application's behavior:
 
 | Property | Type | Default | Description |
 |----------|------|---------|-------------|
+| `OutputFolder` | string | `"output"` | Folder for the working files: `TopGames.json`, `TopGamesDetailed.json` and the resumable `TopGamesDetailed.jsonl` (created automatically). A file name given as an absolute path is used as is. Per-game files go to `IndividualJsonOutputFolder` |
 | `LoadFromFile` | bool | `false` | If `true`, load from previously saved JSON file; if `false`, use data dump |
-| `DataDumpFileName` | string | `"boardgames_ranks_2025-11-07.zip"` | BGG data dump ZIP file path (used when LoadFromFile is false) |
+| `DataDumpFileName` | string | `"Data/boardgames_ranks_*.zip"` | BGG data dump ZIP path (used when LoadFromFile is false). With a wildcard the file with the **newest `yyyy-MM-dd` date in its name** is used, so a newly downloaded dump is picked up without changing the config. Use an exact file name to pin a specific dump |
 | `Count` | int | `100` | Number of top games to fetch |
-| `StartPosition` | int | `0` | Start position for fetching details (0-based index, for resuming interrupted runs) |
+| `RankedOnly` | bool | `true` | If `true`, only ranked games are used and the list stops when the ranked games run out (the data dump has ~30,000 ranked base games, so a larger `Count` returns fewer). If `false`, unranked games (in data dump order) fill up the list until `Count` is reached. Expansions are always skipped |
 | `LoadFileName` | string | `"TopGames.json"` | File to load games from (when LoadFromFile is true) |
 | `SaveBasicFileName` | string | `"TopGames.json"` | File to save basic game data to |
 | `SaveDetailedFileName` | string | `"TopGamesDetailed.json"` | File to save detailed game data to |
 | `FetchGameDetails` | bool | `true` | If `true`, fetch detailed API information; if `false`, skip details |
+| `RefreshAfterDays` | int | `0` | `0`: games already fetched are never fetched again. `N > 0`: games whose details are older than N days (see the `fetchedAt` field) are fetched again and replaced |
 | `SaveIndividualJsonFiles` | bool | `false` | If `true`, save each game as a separate JSON file; if `false`, save only combined file |
 | `IndividualJsonOutputFolder` | string | `"output/games"` | Folder path where individual game JSON files will be saved |
 
@@ -230,25 +232,18 @@ Edit `BGGDataFetcher.json`:
 ```json
 {
   "Settings": {
-    "DataDumpFileName": "boardgames_ranks_2025-12-01.zip",
+    "DataDumpFileName": "Data/boardgames_ranks_*.zip",
     "Count": 500
   }
 }
 ```
 
 **6. Resume interrupted detail fetching:**
-If your detail fetching was interrupted (e.g., stopped at game 600 out of 1000):
-```json
-{
-  "Settings": {
-    "LoadFromFile": true,
-    "LoadFileName": "TopGames.json",
-    "StartPosition": 600,
-    "FetchGameDetails": true
-  }
-}
-```
-The application automatically saves progress every 300 games to files like `TopGamesDetailed_progress_300.json`, `TopGamesDetailed_progress_600.json`, etc.
+The application appends every fetched batch to `TopGamesDetailed.jsonl` (in `OutputFolder`, next to `SaveDetailedFileName`). Resuming is automatic: just run it again and it skips every game already in that file, and retries any that failed (rate limiting, server errors). When all games are fetched it writes `TopGamesDetailed.json` (and the per-game files if enabled). Press Ctrl+C at any time to stop safely.
+
+To fetch everything again from scratch, delete `TopGamesDetailed.jsonl`.
+
+**Updating existing data:** every game has a `fetchedAt` timestamp (UTC). Set `RefreshAfterDays` to e.g. `30` and run again: only games that are new or older than 30 days are fetched, the rest is kept. If a refresh fails for a game, its old data is kept. Individual game files are named by BGG id (`224517.json`), so they are overwritten in place. Every run also applies the ranks of the current data dump to all games already fetched (no re-fetch needed) and writes the output in rank order. Exit codes: `0` done, `1` error, `2` done but some games could not be fetched, `130` interrupted with Ctrl+C. The `Data` folder is looked up from the working folder, then from the exe folder and its parents.
 
 **7. Save each game as a separate JSON file:**
 If you want to save each game as an individual JSON file in addition to the combined file:

@@ -40,8 +40,12 @@ logs/
 *.csv
 TopGames.json
 TopGamesDetailed.json
+*.jsonl
 TopGamesDetailed_progress_*.json
 bgg_top_*.csv
 
 # Individual game JSON output folder
 output/
+
+# Release publish output
+publish/

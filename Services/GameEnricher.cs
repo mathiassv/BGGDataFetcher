@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Net;
 using System.Xml.Linq;
 using BGGDataFetcher.Models;
 
@@ -6,99 +7,68 @@ namespace BGGDataFetcher.Services;
 
 public class GameEnricher
 {
+    // A player count needs at least this many poll votes before it is used for the best/recommended lists
+    private const int MIN_VOTES_PER_COUNT = 10;
+
     public void EnrichGameFromXml(BoardGameDetailed game, XElement item)
     {
-        // Get primary name (update if needed)
         var primaryName = item.Elements("name")
           .FirstOrDefault(n => n.Attribute("type")?.Value == "primary")
           ?.Attribute("value")?.Value;
         if (!string.IsNullOrEmpty(primaryName))
             game.Name = primaryName;
 
-        // Year published
         var year = (int?)item.Element("yearpublished")?.Attribute("value");
         if (year.HasValue)
             game.YearPublished = year.Value;
 
-        // Description
-        game.Description = item.Element("description")?.Value?.Trim();
+        // BGG descriptions contain HTML entities (&mdash;, &rsquo;, &#10; ...) on top of the XML encoding
+        var description = item.Element("description")?.Value;
+        game.Description = description == null ? null : WebUtility.HtmlDecode(description).Trim();
 
-        // Images
         game.Thumbnail = item.Element("thumbnail")?.Value?.Trim();
         game.Image = item.Element("image")?.Value?.Trim();
 
-        // Min/Max Players
         game.MinPlayers = (int?)item.Element("minplayers")?.Attribute("value");
         game.MaxPlayers = (int?)item.Element("maxplayers")?.Attribute("value");
-
-        // Playing time
         game.MinPlayTime = (int?)item.Element("minplaytime")?.Attribute("value");
         game.MaxPlayTime = (int?)item.Element("maxplaytime")?.Attribute("value");
         game.PlayingTime = (int?)item.Element("playingtime")?.Attribute("value");
-
-        // Min Age
         game.MinAge = (int?)item.Element("minage")?.Attribute("value");
 
-        // Categories - Extract all boardgamecategory links
-        var categories = item.Elements("link")
-          .Where(l => l.Attribute("type")?.Value == "boardgamecategory")
-          .Select(l => l.Attribute("value")?.Value)
-       .Where(v => !string.IsNullOrEmpty(v))
-          .ToList();
-        if (categories.Count != 0)
-            game.Categories = categories!;
+        game.Categories = GetLinks(item, "boardgamecategory");
+        game.Mechanics = GetLinks(item, "boardgamemechanic");
+        game.Designers = GetLinks(item, "boardgamedesigner");
+        game.Artists = GetLinks(item, "boardgameartist");
+        game.Publishers = GetLinks(item, "boardgamepublisher");
 
-        // Mechanics - Extract all boardgamemechanic links
-        var mechanics = item.Elements("link")
-       .Where(l => l.Attribute("type")?.Value == "boardgamemechanic")
-          .Select(l => l.Attribute("value")?.Value)
-          .Where(v => !string.IsNullOrEmpty(v))
-          .ToList();
-        if (mechanics.Count != 0)
-            game.Mechanics = mechanics!;
-
-        // Designers - Extract all boardgamedesigner links
-        var designers = item.Elements("link")
-          .Where(l => l.Attribute("type")?.Value == "boardgamedesigner")
-          .Select(l => l.Attribute("value")?.Value)
-          .Where(v => !string.IsNullOrEmpty(v))
-          .ToList();
-        if (designers.Count != 0)
-            game.Designers = designers!;
-
-        // Artists - Extract all boardgameartist links
-        var artists = item.Elements("link")
-          .Where(l => l.Attribute("type")?.Value == "boardgameartist")
-          .Select(l => l.Attribute("value")?.Value)
-          .Where(v => !string.IsNullOrEmpty(v))
-        .ToList();
-        if (artists.Count != 0)
-            game.Artists = artists!;
-
-        // Publishers - Extract all boardgamepublisher links
-        var publishers = item.Elements("link")
-          .Where(l => l.Attribute("type")?.Value == "boardgamepublisher")
-          .Select(l => l.Attribute("value")?.Value)
-          .Where(v => !string.IsNullOrEmpty(v))
-      .ToList();
-        if (publishers.Count != 0)
-            game.Publishers = publishers!;
-
-        // Player Count Recommendations
         ExtractPlayerCountRecommendations(game, item);
-
-        // Statistics
         ExtractStatistics(game, item);
     }
 
-    private void ExtractPlayerCountRecommendations(BoardGameDetailed game, XElement item)
+    private static List<string> GetLinks(XElement item, string linkType) =>
+        item.Elements("link")
+          .Where(l => l.Attribute("type")?.Value == linkType)
+          .Select(l => l.Attribute("value")?.Value)
+          .OfType<string>()
+          .Where(v => v.Length > 0)
+          .ToList();
+
+    private static int? ParseInt(XElement? parent, string name) =>
+        int.TryParse(parent?.Element(name)?.Attribute("value")?.Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var value)
+          ? value : null;
+
+    private static double? ParseDouble(XElement? parent, string name) =>
+        double.TryParse(parent?.Element(name)?.Attribute("value")?.Value, NumberStyles.Float, CultureInfo.InvariantCulture, out var value)
+          ? value : null;
+
+    private static void ExtractPlayerCountRecommendations(BoardGameDetailed game, XElement item)
     {
         var playerCountPoll = item.Elements("poll")
           .FirstOrDefault(p => p.Attribute("name")?.Value == "suggested_numplayers");
 
         if (playerCountPoll == null) return;
 
-        // Extract detailed voting data for each player count
         List<PlayerCountRecommendation> recommendations = [];
 
         foreach (var result in playerCountPoll.Elements("results"))
@@ -106,10 +76,8 @@ public class GameEnricher
             var numPlayersStr = result.Attribute("numplayers")?.Value;
             if (string.IsNullOrEmpty(numPlayersStr)) continue;
 
-            // Check if this is a "X+" range (e.g., "4+")
+            // "4+" means "four or more"
             bool isOrMore = numPlayersStr.EndsWith('+');
-
-            // Parse numPlayers - handle "4+" by taking just the number
             if (!int.TryParse(numPlayersStr.TrimEnd('+'), out int numPlayers))
                 continue;
 
@@ -124,15 +92,14 @@ public class GameEnricher
 
             foreach (var voteResult in result.Elements("result"))
             {
-                var resultValue = voteResult.Attribute("value")?.Value;
                 var numVotes = (int?)voteResult.Attribute("numvotes") ?? 0;
 
-                if (resultValue == "Best")
-                    recommendation.Best = numVotes;
-                else if (resultValue == "Recommended")
-                    recommendation.Recommended = numVotes;
-                else if (resultValue == "Not Recommended")
-                    recommendation.NotRecommended = numVotes;
+                switch (voteResult.Attribute("value")?.Value)
+                {
+                    case "Best": recommendation.Best = numVotes; break;
+                    case "Recommended": recommendation.Recommended = numVotes; break;
+                    case "Not Recommended": recommendation.NotRecommended = numVotes; break;
+                }
             }
 
             recommendations.Add(recommendation);
@@ -140,92 +107,50 @@ public class GameEnricher
 
         game.PlayerCountRecommendations = recommendations;
 
-        // Calculate best and recommended player counts from voting data
-        // Exclude "X+" entries as they represent edge cases
-        var regularRecommendations = recommendations.Where(r => !r.IsOrMore).ToList();
+        // Only trust counts the game supports (the poll also has rows beyond max players, and the "N+" row means
+        // "more than max") and that enough people voted on
+        var eligible = recommendations
+          .Where(r => !r.IsOrMore
+                      && r.TotalVotes >= MIN_VOTES_PER_COUNT
+                      && (game.MinPlayers is not { } min || r.NumPlayers >= min)
+                      && (game.MaxPlayers is not { } max || r.NumPlayers <= max))
+          .OrderBy(r => r.NumPlayers)
+          .ToList();
 
-        // Best = highest number of "Best" votes
-        var bestPlayerCount = regularRecommendations
-            .OrderByDescending(r => r.Best)
-            .FirstOrDefault();
-        if (bestPlayerCount != null && bestPlayerCount.Best > 0)
-            game.BestPlayerCount = bestPlayerCount.NumPlayers;
+        game.BestPlayerCounts = eligible.Where(r => r.RecommendationLevel == "Best").Select(r => r.NumPlayers).ToList();
+        game.RecommendedPlayerCounts = eligible.Where(r => r.IsPlayable).Select(r => r.NumPlayers).ToList();
 
-        // Recommended = highest combined "Best" + "Recommended" votes
-        var recommendedPlayerCount = regularRecommendations
-            .OrderByDescending(r => r.Best + r.Recommended)
-            .FirstOrDefault();
-        if (recommendedPlayerCount != null && (recommendedPlayerCount.Best + recommendedPlayerCount.Recommended) > 0)
-            game.RecommendedPlayerCount = recommendedPlayerCount.NumPlayers;
+        // Ties go to the lowest player count (the list is ordered by player count and OrderByDescending is stable)
+        var best = eligible.OrderByDescending(r => r.Best).FirstOrDefault();
+        game.BestPlayerCount = best is { Best: > 0 } ? best.NumPlayers : null;
+
+        var recommended = eligible.Where(r => r.IsPlayable).OrderByDescending(r => r.Best + r.Recommended).FirstOrDefault();
+        game.RecommendedPlayerCount = recommended?.NumPlayers;
     }
 
-    private void ExtractStatistics(BoardGameDetailed game, XElement item)
+    private static void ExtractStatistics(BoardGameDetailed game, XElement item)
     {
-        var statistics = item.Element("statistics");
-        var ratings = statistics?.Element("ratings");
-
+        var ratings = item.Element("statistics")?.Element("ratings");
         if (ratings == null) return;
 
-        // Ratings
-        var usersRatedValue = ratings.Element("usersrated")?.Attribute("value")?.Value;
-        if (usersRatedValue != null && int.TryParse(usersRatedValue, out int usersRated))
-            game.UsersRated = usersRated;
+        game.UsersRated = ParseInt(ratings, "usersrated");
+        game.Average = ParseDouble(ratings, "average");
+        game.BayesAverage = ParseDouble(ratings, "bayesaverage");
+        game.StandardDeviation = ParseDouble(ratings, "stddev");
+        game.Owned = ParseInt(ratings, "owned");
+        game.Trading = ParseInt(ratings, "trading");
+        game.Wanting = ParseInt(ratings, "wanting");
+        game.Wishing = ParseInt(ratings, "wishing");
+        game.NumComments = ParseInt(ratings, "numcomments");
+        game.NumWeights = ParseInt(ratings, "numweights");
+        game.AverageWeight = ParseDouble(ratings, "averageweight");
 
-        var averageValue = ratings.Element("average")?.Attribute("value")?.Value;
-        if (averageValue != null && double.TryParse(averageValue, NumberStyles.Float, CultureInfo.InvariantCulture, out double avg))
-            game.Average = avg;
-
-        var bayesAverageValue = ratings.Element("bayesaverage")?.Attribute("value")?.Value;
-        if (bayesAverageValue != null && double.TryParse(bayesAverageValue, NumberStyles.Float, CultureInfo.InvariantCulture, out double ba))
-            game.BayesAverage = ba;
-
-        var stdDevValue = ratings.Element("stddev")?.Attribute("value")?.Value;
-        if (stdDevValue != null && double.TryParse(stdDevValue, NumberStyles.Float, CultureInfo.InvariantCulture, out double stdDev))
-            game.StandardDeviation = stdDev;
-
-        var medianValue = ratings.Element("median")?.Attribute("value")?.Value;
-        if (medianValue != null && double.TryParse(medianValue, NumberStyles.Float, CultureInfo.InvariantCulture, out double median))
-            game.Median = median;
-
-        // Rank
-        var rankElement = ratings.Element("ranks")
+        // "Not Ranked" simply fails to parse and leaves Rank null
+        var rankValue = ratings.Element("ranks")
           ?.Elements("rank")
-          .FirstOrDefault(r => r.Attribute("name")?.Value == "boardgame");
-
-        if (rankElement != null)
-        {
-            var rankValue = rankElement.Attribute("value")?.Value;
-            if (rankValue != null && rankValue != "Not Ranked" && int.TryParse(rankValue, out int rank))
-                game.Rank = rank;
-        }
-
-        // Owned/Wanting/Wishing
-        var ownedValue = ratings.Element("owned")?.Attribute("value")?.Value;
-        if (ownedValue != null && int.TryParse(ownedValue, out int owned))
-            game.Owned = owned;
-
-        var tradingValue = ratings.Element("trading")?.Attribute("value")?.Value;
-        if (tradingValue != null && int.TryParse(tradingValue, out int trading))
-            game.Trading = trading;
-
-        var wantingValue = ratings.Element("wanting")?.Attribute("value")?.Value;
-        if (wantingValue != null && int.TryParse(wantingValue, out int wanting))
-            game.Wanting = wanting;
-
-        var wishingValue = ratings.Element("wishing")?.Attribute("value")?.Value;
-        if (wishingValue != null && int.TryParse(wishingValue, out int wishing))
-            game.Wishing = wishing;
-
-        var numCommentsValue = ratings.Element("numcomments")?.Attribute("value")?.Value;
-        if (numCommentsValue != null && int.TryParse(numCommentsValue, out int numComments))
-            game.NumComments = numComments;
-
-        var numWeightsValue = ratings.Element("numweights")?.Attribute("value")?.Value;
-        if (numWeightsValue != null && int.TryParse(numWeightsValue, out int numWeights))
-            game.NumWeights = numWeights;
-
-        var averageWeightValue = ratings.Element("averageweight")?.Attribute("value")?.Value;
-        if (averageWeightValue != null && double.TryParse(averageWeightValue, NumberStyles.Float, CultureInfo.InvariantCulture, out double avgWeight))
-            game.AverageWeight = avgWeight;
+          .FirstOrDefault(r => r.Attribute("name")?.Value == "boardgame")
+          ?.Attribute("value")?.Value;
+        if (int.TryParse(rankValue, out int rank))
+            game.Rank = rank;
     }
 }

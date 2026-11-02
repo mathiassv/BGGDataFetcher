@@ -114,10 +114,14 @@ public class ConsoleOutput : IConsoleOutput
       int closeBrace = result.IndexOf('}', openBrace);
       if (closeBrace == -1) break;
 
-      // Replace {PropertyName} with {argIndex}
-      result = result.Substring(0, openBrace + 1) + argIndex + result.Substring(closeBrace);
+      // Replace {PropertyName} with {argIndex}, keeping a format specifier ({Rating:F2} -> {0:F2})
+      var placeholder = result.Substring(openBrace + 1, closeBrace - openBrace - 1);
+      var colon = placeholder.IndexOf(':');
+      var format = colon >= 0 ? placeholder.Substring(colon) : string.Empty;
+
+      result = result.Substring(0, openBrace + 1) + argIndex + format + result.Substring(closeBrace);
+      pos = openBrace + 1 + argIndex.ToString().Length + format.Length + 1;
       argIndex++;
-      pos = openBrace + argIndex.ToString().Length + 1;
     }
 
     return result;

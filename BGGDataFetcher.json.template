@@ -6,14 +6,16 @@
     "LogLevel": "Information"
   },
   "Settings": {
+    "OutputFolder": "output",
     "LoadFromFile": false,
-    "DataDumpFileName": "data\boardgames_ranks_2025-11-07.zip",
+    "DataDumpFileName": "Data/boardgames_ranks_*.zip",
     "Count": 1000,
-    "StartPosition": 0,
+    "RankedOnly": true,
     "LoadFileName": "TopGames.json",
     "SaveBasicFileName": "TopGames.json",
     "SaveDetailedFileName": "TopGamesDetailed.json",
     "FetchGameDetails": true,
+    "RefreshAfterDays": 0,
     "SaveIndividualJsonFiles": false,
     "IndividualJsonOutputFolder": "output/games"
   }
