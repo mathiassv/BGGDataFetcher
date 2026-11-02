@@ -26,7 +26,6 @@ public class FetchService(
   IConsoleOutput output)
 {
   private const int API_BATCH_SIZE = 20; // BGG allows at most 20 ids per "thing" request
-  private const int DELAY_MS = 1000;     // Delay between API requests
 
   public async Task<List<BoardGameBasic>> FetchTopGamesFromDataDumpAsync(int count, string dataDumpFileName, string saveFilePath)
   {
@@ -127,7 +126,8 @@ public class FetchService(
 
         if (i < totalBatches - 1)
         {
-          await Task.Delay(DELAY_MS, ct);
+          // Starts at 1s and grows each time BGG rate limits us (see BggApiClient.RequestDelay)
+          await Task.Delay(apiClient.RequestDelay, ct);
         }
       }
     }

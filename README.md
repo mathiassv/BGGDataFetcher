@@ -17,7 +17,7 @@ A .NET 9 console application that collects detailed information about top-ranked
 - **Flexible Workflow**: Use data dump or load from existing files
 - **Secure**: Uses .NET User Secrets for API token management
 - **Dual Logging**: Clean console output + detailed file logging
-- **Error Recovery**: Retries with backoff on rate limiting / server errors (honors `Retry-After`) and automatic batch splitting on bad XML
+- **Error Recovery**: Retries on server errors with backoff and automatic batch splitting on bad XML. BGG limits the number of calls per period: on a rate limit (429) the app waits 10s (or the server's `Retry-After` if longer) and retries, and every 429 also adds 0.5s to the pause between requests for the rest of the run: 1s, 1.5s, 2s ... up to 10s
 - **Progress Tracking**: Every batch is appended to a `.jsonl` file; re-running resumes automatically and retries failures
 
 ## 🚀 Getting Started

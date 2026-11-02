@@ -15,8 +15,36 @@ public class BggApiClient(
     private const string BGG_API_BASE = "https://boardgamegeek.com/xmlapi2";
     private const int MAX_ATTEMPTS = 6;
     private const double MIN_RETRY_DELAY_SECONDS = 1;
-    private const int SPLIT_DELAY_MS = 1000; // pause between the requests of a split batch
     private static readonly TimeSpan MaxRetryDelay = TimeSpan.FromMinutes(2);
+
+    // BGG limits the number of calls in a period of time. When a request is rate limited (429) we
+    //  1. wait RateLimitWait (a longer Retry-After from the server wins) and try the same request again, and
+    //  2. make the pause between all following requests a little longer, for the rest of the run:
+    //     1s -> 1.5s -> 2s -> 2.5s ... up to 10s. Every 429 adds one step.
+    private const double REQUEST_DELAY_START_SECONDS = 1;
+    private const double REQUEST_DELAY_STEP_SECONDS = 0.5;
+    private const double REQUEST_DELAY_MAX_SECONDS = 10;
+
+    /// <summary>How long to wait before retrying a request that was rate limited (429).</summary>
+    public TimeSpan RateLimitWait { get; set; } = TimeSpan.FromSeconds(10);
+
+    /// <summary>
+    /// The pause callers should make between two requests. Starts at 1 second and grows by half a second
+    /// each time BGG answers 429, up to 10 seconds. It is not reset during the run.
+    /// </summary>
+    public TimeSpan RequestDelay { get; private set; } = TimeSpan.FromSeconds(REQUEST_DELAY_START_SECONDS);
+
+    private TimeSpan OnRateLimited(TimeSpan? retryAfter)
+    {
+        var next = Math.Min(REQUEST_DELAY_MAX_SECONDS, RequestDelay.TotalSeconds + REQUEST_DELAY_STEP_SECONDS);
+        if (next > RequestDelay.TotalSeconds)
+        {
+            RequestDelay = TimeSpan.FromSeconds(next);
+            logger.WarnAndShow(output, "  ⚠ Rate limited (429) - pause between requests is now {Delay:F1}s", RequestDelay.TotalSeconds);
+        }
+
+        return retryAfter is { } serverWait && serverWait > RateLimitWait ? serverWait : RateLimitWait;
+    }
 
     /// <summary>
     /// Fetches details for the given game IDs. Transient failures (429, 5xx, timeouts, queued/empty responses)
@@ -52,7 +80,7 @@ public class BggApiClient(
         var midpoint = gameIds.Count / 2;
         List<BoardGameDetailed> combined = [];
         combined.AddRange(await FetchGameDetailsBatchAsync(gameIds.Take(midpoint).ToList(), ct));
-        await Task.Delay(SPLIT_DELAY_MS, ct);
+        await Task.Delay(RequestDelay, ct);
         combined.AddRange(await FetchGameDetailsBatchAsync(gameIds.Skip(midpoint).ToList(), ct));
         return combined;
     }
@@ -95,7 +123,9 @@ public class BggApiClient(
                 else
                 {
                     reason = $"{(int)response.StatusCode} {response.StatusCode}";
-                    delay = GetRetryAfter(response) ?? GetBackoff(attempt);
+                    delay = response.StatusCode == HttpStatusCode.TooManyRequests
+                        ? OnRateLimited(GetRetryAfter(response))
+                        : GetRetryAfter(response) ?? GetBackoff(attempt);
                 }
             }
             catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException && !ct.IsCancellationRequested)
